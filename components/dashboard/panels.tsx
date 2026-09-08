@@ -39,7 +39,7 @@ export function CapitalPanel({ analysis, account }: { analysis: FxAnalysis; acco
 }
 
 export function ReasonsPanel({ analysis }: { analysis: FxAnalysis }) {
-  return <Panel title="判断理由" eyebrow="ANALYSIS BREAKDOWN" className="reasons-panel"><div className="reasons-grid">{analysis.reasons.map((reason, index) => <article className="reason" key={reason.category}><div className="row"><h3><span className="reason-number">0{index + 1}</span>{reason.category}</h3><span className={`badge ${reason.tone}`}>{reason.assessment}</span></div><h4>{reason.summary}</h4><p>{reason.detail}</p></article>)}</div></Panel>;
+  return <Panel title="判断理由（モック）" eyebrow="ANALYSIS BREAKDOWN" className="reasons-panel"><div className="reasons-grid">{analysis.reasons.filter(reason => reason.category !== "テクニカル").map((reason, index) => <article className="reason" key={reason.category}><div className="row"><h3><span className="reason-number">0{index + 1}</span>{reason.category}</h3><span className={`badge ${reason.tone}`}>{reason.assessment}</span></div><h4>{reason.summary}</h4><p>{reason.detail}</p></article>)}</div></Panel>;
 }
 
 export function CommentaryPanel({ analysis }: { analysis: FxAnalysis }) {
