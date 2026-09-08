@@ -3,8 +3,6 @@
 import { useEffect, useState } from "react";
 import { tradeSignals, type AIAnalysis, type AnalysisResponse, type TradeSignal } from "@/lib/ai/types";
 import { categoryLabels } from "@/lib/ai/input";
-import type { Account } from "@/types/analysis";
-import { yen } from "@/lib/analysis";
 import { Panel } from "./panels";
 
 const signalLabels: Record<TradeSignal, string> = { strong_buy: "すごく買い", buy: "買い", wait: "待った", sell: "売り", strong_sell: "すごく売り" };
@@ -33,7 +31,7 @@ export function useAIAnalysis(pair: string) {
   }, [pair]);
   return result?.pair === pair ? result.response : null;
 }
-export function AIOverview({ response, pair, account }: { response: AnalysisResponse | null; pair: string; account: Account }) {
+export function AIOverview({ response, pair }: { response: AnalysisResponse | null; pair: string }) {
   const [now, setNow] = useState(0);
   useEffect(() => { const timer = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(timer); }, []);
   const data = response?.data;
@@ -41,7 +39,6 @@ export function AIOverview({ response, pair, account }: { response: AnalysisResp
   const signal = expired ? "wait" : data?.signal ?? "wait";
   const scenario = expired ? null : data?.scenario;
   const message = expired ? "分析の有効期限を過ぎました。更新まで待機してください。" : response?.error?.message ?? data?.ai.message ?? (!response ? "市場データを集めて分析中…" : null);
-  const loss = scenario ? (scenario.direction === "long" ? scenario.entryZone.max - scenario.stopLoss : scenario.stopLoss - scenario.entryZone.min) * 1000 : null;
   return <>
     <Panel title="AI総合判定" eyebrow="AI SIGNAL / STRUCTURED ANALYSIS" className="signal-panel">
       <div className="signal-result"><div><span className={`signal-word ${tone(signal)}`} data-testid="ai-signal">{signalLabels[signal]}</span><p className="muted">{pair} の総合分析</p></div><div className="score"><strong>{data ? `${data.score > 0 ? "+" : ""}${data.score}` : "—"}</strong><small>方向スコア / −100〜+100</small></div></div>
@@ -58,12 +55,7 @@ export function AIOverview({ response, pair, account }: { response: AnalysisResp
       {scenario && <p className="footnote">{scenario.invalidation}</p>}
       <p className="footnote">単位 JPY · エントリー帯の不利な端でRRを計算 · 注文は実行しません</p>
     </Panel>
-    <Panel title="資金管理" eyebrow="RISK MANAGEMENT / SAMPLE ACCOUNT">
-      <div className="capital-summary"><div><span className="muted">参考資金</span><strong>{yen(account.balance)}</strong></div><div className="target"><span className="muted">目標資金</span><strong>{yen(account.target)}</strong></div></div>
-      <progress className="capital-progress" value={account.balance} max={account.target} aria-label="目標資金に対する参考資金" />
-      <dl className="metrics"><div><dt>推奨数量</dt><dd><small>未算出</small></dd></div><div><dt>1,000通貨の想定損失</dt><dd className="negative">{loss === null ? "—" : yen(loss)}</dd></div><div><dt>参考資金に対する割合</dt><dd>{loss === null || account.balance <= 0 ? "—" : `${(loss / account.balance * 100).toFixed(1)}%`}</dd></div></dl>
-      <p className="footnote">資金はサンプル値です。想定損失は候補ゾーン内の不利な価格で算出。手数料・スリッページは含みません。</p>
-    </Panel>
+
   </>;
 }
 function ReasonList({ items, empty }: { items: string[]; empty: string }) {
