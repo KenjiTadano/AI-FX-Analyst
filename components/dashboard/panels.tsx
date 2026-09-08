@@ -43,5 +43,5 @@ export function ReasonsPanel({ analysis }: { analysis: FxAnalysis }) {
 }
 
 export function CommentaryPanel({ analysis }: { analysis: FxAnalysis }) {
-  return <Panel title="AI分析コメント" eyebrow="ANALYST NOTE" className="commentary-panel"><p className="analysis-comment">{analysis.comment}</p><div className="note-footer"><span className="note-mark">✦</span><span>サンプル分析 · AIによる実際の生成結果ではありません</span></div></Panel>;
+  return <Panel title="AI分析コメント（モック）" eyebrow="ANALYST NOTE" className="commentary-panel"><p className="analysis-comment">{analysis.comment}</p><div className="note-footer"><span className="note-mark">✦</span><span>サンプル分析 · AIによる実際の生成結果ではありません</span></div></Panel>;
 }
