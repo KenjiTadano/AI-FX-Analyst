@@ -187,3 +187,47 @@ h2 { font-size: 17px; font-weight: 600; margin-top: 4px; }
 @media (max-width: 800px) { .risk-settings, .drawdown-grid { grid-template-columns: 1fr 1fr; } }
 @media (max-width: 640px) { .risk-detail-grid, .risk-highlights { grid-template-columns: 1fr; } .risk-card { padding: 16px; } }
 @media (max-width: 360px) { .risk-settings { grid-template-columns: 1fr; } }
+
+/* Task007 journal: localized navigation preserves the existing analysis layout. */
+[hidden] { display: none !important; }
+.journal-nav { display: flex; gap: 8px; margin: 24px 0; }
+.journal-nav button, .journal-shell button { border: 1px solid #405169; border-radius: 7px; padding: 10px 16px; background: #172232; cursor: pointer; font-size: 13px; min-height: 42px; }
+.journal-nav button[aria-current], .journal-shell .journal-primary { background: #205346; border-color: #65d9bc; color: #defcf3; }
+.journal-shell button:disabled { opacity: .45; cursor: default; }
+.journal-shell button:focus-visible, .journal-nav button:focus-visible, .journal-shell input:focus-visible, .journal-shell textarea:focus-visible, .journal-shell summary:focus-visible { outline: 2px solid var(--green); outline-offset: 3px; }
+.journal-shell > .panel, .journal-form { margin: 20px 0; }
+.journal-toolbar, .journal-actions, .calendar-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
+.journal-toolbar { justify-content: space-between; margin: 20px 0; }
+.journal-form, .delete-confirm { padding: 24px; background: #101a28; border: 1px solid #47646e; border-radius: 12px; }
+.journal-form h3, .trade-record h3, .performance-cards h3 { font-size: 15px; }
+.journal-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 20px 0; }
+.journal-fields label, .calendar-controls label { font-size: 12px; color: var(--muted); min-width: 0; }
+.journal-shell input, .journal-shell select, .journal-shell textarea { display: block; width: 100%; min-width: 0; max-width: 100%; padding: 12px; margin: 6px 0 0; font-size: 16px; color: var(--foreground); border: 1px solid #405169; border-radius: 6px; background: #0d1623; }
+.journal-actions { margin-top: 16px; }
+.trade-list { display: grid; gap: 16px; }
+.trade-record { border: 1px solid var(--border); border-radius: 10px; padding: 18px; min-width: 0; overflow-wrap: anywhere; }
+.trade-record .row { flex-wrap: wrap; }
+.trade-pnl { display: block; font-size: 25px; margin: 14px 0; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.trade-record details { margin-top: 12px; font-size: 12px; line-height: 1.8; color: var(--muted); }
+.trade-record summary { cursor: pointer; color: var(--green); padding: 6px 0; }
+.trade-notes { white-space: pre-wrap; margin-top: 12px; font-size: 12px; }
+.performance-grid { display: grid; gap: 20px; }
+.journal-wide { grid-column: 1 / -1; }
+.journal-stats { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; }
+.journal-stats > div, .performance-cards article { background: #172232; border-radius: 8px; padding: 16px; min-width: 0; }
+.journal-stats span { display: block; font-size: 11px; color: var(--muted); }
+.journal-stats strong { display: block; margin-top: 10px; font-size: 19px; overflow-wrap: anywhere; }
+.equity-chart { width: 100%; height: auto; max-height: 230px; display: block; }
+.calendar-controls { justify-content: space-between; }
+.pnl-calendar { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 5px; margin-top: 20px; }
+.calendar-weekday { text-align: center; font-size: 12px; color: var(--muted); }
+.journal-shell .pnl-calendar button { min-height: 76px; min-width: 0; padding: 8px 3px; text-align: left; overflow-wrap: anywhere; }
+.pnl-calendar button span, .pnl-calendar button small { display: block; font-variant-numeric: tabular-nums; }
+.pnl-calendar button small { font-size: 11px; margin-top: 8px; }
+.pnl-calendar button[aria-pressed="true"] { outline: 2px solid var(--green); }
+.day-trades { margin-top: 24px; }
+.performance-cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.performance-cards strong { display: block; font-size: 22px; margin: 12px 0; overflow-wrap: anywhere; }
+.performance-cards p, .performance-cards small { font-size: 12px; }
+@media (max-width: 800px) { .journal-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 540px) { .journal-fields, .performance-cards { grid-template-columns: 1fr; } .journal-form { padding: 18px; } .journal-shell .panel { padding: 20px 14px; } .pnl-calendar { gap: 3px; } .pnl-calendar button small { font-size: 9px; } .journal-shell .pnl-calendar button { min-height: 70px; } .trade-record { padding: 14px; } .journal-stats strong { font-size: 17px; } }

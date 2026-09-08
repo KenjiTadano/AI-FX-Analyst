@@ -12,7 +12,7 @@ const number = (n: number) => n.toLocaleString("ja-JP", { maximumFractionDigits:
 const price = (n: number | null | undefined) => n == null ? "未算出" : n.toFixed(3);
 const readNumber = (value: string) => value.trim() === "" ? NaN : Number(value);
 
-export function RiskManagement({ analysis, pair, currentRate, initialBalance = 50000, initialTarget = 100000 }: { analysis: AIAnalysis | null; pair: string; currentRate: number | null; initialBalance?: number; initialTarget?: number }) {
+export function RiskManagement({ analysis, pair, currentRate, initialBalance = 50000, initialTarget = 100000, onBalanceChange }: { analysis: AIAnalysis | null; pair: string; currentRate: number | null; initialBalance?: number; initialTarget?: number; onBalanceChange?: (balance: number) => void }) {
   const [fields, setFields] = useState({ balance: String(initialBalance), target: String(initialTarget), riskPercent: "1.0", tradeUnit: "1" });
   const [positions, setPositions] = useState<Record<string, string>>({});
   const [now, setNow] = useState(0);
@@ -28,7 +28,7 @@ export function RiskManagement({ analysis, pair, currentRate, initialBalance = 5
   const inputPosition = positions[pair] ?? "";
   const actual = size && plan ? positionRisk(readNumber(inputPosition), size, settings.balance, plan.entry, plan.scenario.stopLoss, settings.tradeUnit) : null;
   function field(key: keyof typeof fields, label: string, min: string, max: string, step: string) {
-    return <label>{label}<input type="number" inputMode="decimal" min={min} max={max} step={step} value={fields[key]} onChange={event => setFields(previous => ({ ...previous, [key]: event.target.value }))} /></label>;
+    return <label>{label}<input type="number" inputMode="decimal" min={min} max={max} step={step} value={fields[key]} onChange={event => { setFields(previous => ({ ...previous, [key]: event.target.value })); if (key === "balance") onBalanceChange?.(readNumber(event.target.value)); }} /></label>;
   }
   return <Panel title="資金・リスク管理" eyebrow="CAPITAL & POSITION LIMIT" className="risk-panel">
     <p className="material-intro">{pair} · 設定した許容損失額から、条件付きプランの最大数量を計算します。</p>
