@@ -231,3 +231,17 @@ h2 { font-size: 17px; font-weight: 600; margin-top: 4px; }
 .performance-cards p, .performance-cards small { font-size: 12px; }
 @media (max-width: 800px) { .journal-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 540px) { .journal-fields, .performance-cards { grid-template-columns: 1fr; } .journal-form { padding: 18px; } .journal-shell .panel { padding: 20px 14px; } .pnl-calendar { gap: 3px; } .pnl-calendar button small { font-size: 9px; } .journal-shell .pnl-calendar button { min-height: 70px; } .trade-record { padding: 14px; } .journal-stats strong { font-size: 17px; } }
+
+/* Task008 authentication and persisted settings. */
+.auth-status { display: flex; justify-content: flex-end; align-items: center; flex-wrap: wrap; gap: 14px; padding: 0 0 18px; font-size: 12px; overflow-wrap: anywhere; }
+.auth-status a { color: var(--green); }
+.auth-status button, .cloud-settings > button, .auth-page button { padding: 10px 16px; border: 1px solid #405169; border-radius: 6px; background: #205346; cursor: pointer; }
+.auth-page { width: min(100%, 500px); margin: 50px auto; padding: 20px; }
+.auth-page > a { display: inline-block; margin-bottom: 20px; color: var(--green); }
+.auth-page h1 { font-size: 24px; }
+.auth-page label { display: block; margin: 20px 0; font-size: 13px; }
+.auth-page input { display: block; width: 100%; min-width: 0; padding: 12px; background: #0d1623; border: 1px solid #405169; border-radius: 6px; margin-top: 8px; font-size: 16px; }
+.auth-page button:disabled { opacity: .5; cursor: default; }
+.auth-page input:focus-visible, .auth-page button:focus-visible, .auth-status button:focus-visible { outline: 2px solid var(--green); outline-offset: 3px; }
+.auth-confirm-error { padding: 20px; color: var(--amber); text-align: center; }
+.cloud-settings { min-width: 0; }

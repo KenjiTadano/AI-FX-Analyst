@@ -21,7 +21,7 @@ export function Performance({ trades, initialBalance }: { trades: Trade[]; initi
       <p className="footnote">勝率 = 勝ち数 ÷ 決済済み件数（引き分けを含む）。平均予定RRは登録されたEntry・損切り・利確から計算できる{stats.riskRewardSamples}件が対象です。手数料・スワップ等は未計上です。</p>
     </Panel>
     <Panel title="資産推移" eyebrow="REALIZED EQUITY" className="journal-wide">
-      <p className="footnote">Task006の設定資産 {money(Number.isFinite(initialBalance) ? initialBalance : null)} を基準に、決済損益を日時順に加算した参考推移です。口座残高への自動反映はありません。設定資産は再読み込みで初期値へ戻ります。</p>
+      <p className="footnote">Task006の設定資産 {money(Number.isFinite(initialBalance) ? initialBalance : null)} を基準に、決済損益を日時順に加算した参考推移です。口座残高への自動反映はありません。設定資産はログイン中のクラウド設定を使用します。</p>
       <strong className="trade-pnl" data-testid="journal-equity">{money(latest)}</strong>
       {curve.length > 0 ? <><svg className="equity-chart" viewBox="0 0 640 180" role="img" aria-label={`基準資産から${curve.length - 1}決済後、${money(latest)}`}><line x1="24" y1="156" x2="616" y2="156" stroke="#405169" /><polyline points={plot} fill="none" stroke="#65d9bc" strokeWidth="3" />{curve.length === 1 && <circle cx="24" cy="150" r="4" fill="#65d9bc" />}</svg><div className="row footnote"><span>基準 {money(initialBalance)}</span><span>最小 {money(min)} / 最大 {money(max)}</span></div></> : <p className="footnote">有効な基準資産を設定してください。</p>}
     </Panel>

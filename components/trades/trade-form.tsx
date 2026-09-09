@@ -3,21 +3,22 @@ import { useState, type FormEvent } from "react";
 import type { AIAnalysis } from "@/lib/ai/types";
 import { pairs, type Trade, type TradeDraft } from "@/lib/trades/types";
 import { dateTime, fromLocalDateTime, localDateTime, signalLabels } from "./format";
-interface Props { trade: Trade | null; mode: "new" | "edit" | "close"; pair: string; rate: number | null; analysis: AIAnalysis | null; onSave: (draft: TradeDraft) => string | null; onCancel: () => void }
+interface Props { trade: Trade | null; mode: "new" | "edit" | "close"; pair: string; rate: number | null; analysis: AIAnalysis | null; onSave: (draft: TradeDraft) => Promise<string | null>; onCancel: () => void }
 export function TradeForm({ trade, mode, pair, rate, analysis, onSave, onCancel }: Props) {
   const [fields, setFields] = useState(() => ({ pair: trade?.pair ?? pair, side: trade?.side ?? (analysis?.signal.includes("sell") ? "short" : "long"), entryPrice: String(trade?.entryPrice ?? rate ?? ""), quantity: String(trade?.quantity ?? ""), openedAt: localDateTime(trade?.openedAt ?? new Date().toISOString()), stopLoss: String(trade?.stopLoss ?? ""), takeProfit: String(trade?.takeProfit ?? ""), notes: trade?.notes ?? "", exitPrice: String(trade?.exitPrice ?? ""), closedAt: localDateTime(trade?.closedAt ?? new Date().toISOString()) }));
+  const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const isClosed = mode === "close" || trade?.status === "closed";
   function update(key: keyof typeof fields, value: string) { setFields(previous => ({ ...previous, [key]: value })); }
   function input(key: keyof typeof fields, label: string, type = "number", optional = false) {
     return <label>{label}<input type={type} required={!optional} step={type === "number" ? "any" : undefined} min={type === "number" ? "0" : undefined} value={fields[key]} onChange={e => update(key, e.target.value)} /></label>;
   }
-  function submit(e: FormEvent) {
-    e.preventDefault();
+  async function submit(e: FormEvent) {
+    e.preventDefault(); if (busy) return; setBusy(true);
     const numeric = (s: string) => s.trim() ? Number(s) : NaN;
     const draft: TradeDraft = { pair: fields.pair as TradeDraft["pair"], side: fields.side as TradeDraft["side"], status: isClosed ? "closed" : "open", quantity: numeric(fields.quantity), entryPrice: numeric(fields.entryPrice), openedAt: trade && fields.openedAt === localDateTime(trade.openedAt) ? trade.openedAt : fromLocalDateTime(fields.openedAt), stopLoss: fields.stopLoss.trim() ? numeric(fields.stopLoss) : null, takeProfit: fields.takeProfit.trim() ? numeric(fields.takeProfit) : null, notes: fields.notes, exitPrice: isClosed ? numeric(fields.exitPrice) : null, closedAt: isClosed ? trade?.closedAt && fields.closedAt === localDateTime(trade.closedAt) ? trade.closedAt : fromLocalDateTime(fields.closedAt) : null };
     // Closing a position only changes exit information, preserving entry timestamps including seconds.
-    setError(onSave(mode === "close" && trade ? { ...trade, status: "closed", exitPrice: draft.exitPrice, closedAt: draft.closedAt } : draft));
+    setError(await onSave(mode === "close" && trade ? { ...trade, status: "closed", exitPrice: draft.exitPrice, closedAt: draft.closedAt } : draft)); setBusy(false);
   }
   const snapshot = mode === "new" ? analysis?.pair === fields.pair ? analysis : null : trade?.analysisSnapshot;
   return <form className="journal-form" onSubmit={submit} aria-label={mode === "new" ? "新規トレード登録" : mode === "close" ? "決済記録" : "取引編集"}>
@@ -34,6 +35,6 @@ export function TradeForm({ trade, mode, pair, rate, analysis, onSave, onCancel 
     {snapshot?.signal === "wait" && <p className="neutral footnote">AI分析では待機判断でした。実際に行った取引の記録は可能です。</p>}
     <p className="footnote">{mode === "new" ? "登録時に表示中の分析をコピーします。過去のエントリー時点の分析を復元するものではありません。" : "登録時のAIスナップショットは変更しません。"}</p>
     {error && <p role="alert" className="negative">{error}</p>}
-    <div className="journal-actions"><button className="journal-primary" type="submit">{mode === "close" ? "決済を保存" : "取引を保存"}</button><button type="button" onClick={onCancel}>キャンセル</button></div>
+    <div className="journal-actions"><button disabled={busy} className="journal-primary" type="submit">{mode === "close" ? "決済を保存" : "取引を保存"}</button><button disabled={busy} type="button" onClick={onCancel}>キャンセル</button></div>
   </form>;
 }

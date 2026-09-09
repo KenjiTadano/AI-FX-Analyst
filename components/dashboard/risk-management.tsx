@@ -5,6 +5,7 @@ import type { RiskSettings } from "@/lib/risk/types";
 import { allowedLoss, positionRisk, positionSize } from "@/lib/risk/position-size";
 import { analysisPlan } from "@/lib/risk/risk-reward";
 import { drawdown, goalProgress } from "@/lib/risk/drawdown";
+import defaults from "@/lib/settings/defaults.json";
 import { Panel } from "./panels";
 
 const money = (n: number | null | undefined) => n == null ? "未算出" : new Intl.NumberFormat("ja-JP", { style: "currency", currency: "JPY", maximumFractionDigits: 2 }).format(n);
@@ -12,8 +13,8 @@ const number = (n: number) => n.toLocaleString("ja-JP", { maximumFractionDigits:
 const price = (n: number | null | undefined) => n == null ? "未算出" : n.toFixed(3);
 const readNumber = (value: string) => value.trim() === "" ? NaN : Number(value);
 
-export function RiskManagement({ analysis, pair, currentRate, initialBalance = 50000, initialTarget = 100000, onBalanceChange }: { analysis: AIAnalysis | null; pair: string; currentRate: number | null; initialBalance?: number; initialTarget?: number; onBalanceChange?: (balance: number) => void }) {
-  const [fields, setFields] = useState({ balance: String(initialBalance), target: String(initialTarget), riskPercent: "1.0", tradeUnit: "1" });
+export function RiskManagement({ analysis, pair, currentRate, initialBalance = defaults.balance, initialTarget = defaults.target, initialRiskPercent = defaults.riskPercent, initialTradeUnit = defaults.tradeUnit, onSettingsChange, disabled = false, onBalanceChange }: { analysis: AIAnalysis | null; pair: string; currentRate: number | null; initialBalance?: number; initialTarget?: number; onBalanceChange?: (balance: number) => void; initialRiskPercent?: number; initialTradeUnit?: number; onSettingsChange?: (settings: RiskSettings) => void; disabled?: boolean }) {
+  const [fields, setFields] = useState({ balance: String(initialBalance), target: String(initialTarget), riskPercent: String(initialRiskPercent), tradeUnit: String(initialTradeUnit) });
   const [positions, setPositions] = useState<Record<string, string>>({});
   const [now, setNow] = useState(0);
   useEffect(() => { const timer = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(timer); }, []);
@@ -27,19 +28,24 @@ export function RiskManagement({ analysis, pair, currentRate, initialBalance = 5
   const size = sizeResult?.data;
   const inputPosition = positions[pair] ?? "";
   const actual = size && plan ? positionRisk(readNumber(inputPosition), size, settings.balance, plan.entry, plan.scenario.stopLoss, settings.tradeUnit) : null;
+  function changeField(key: keyof typeof fields, value: string) {
+    const next = { ...fields, [key]: value }; setFields(next);
+    if (key === "balance") onBalanceChange?.(readNumber(value));
+    onSettingsChange?.({ balance: readNumber(next.balance), target: readNumber(next.target), riskPercent: readNumber(next.riskPercent), tradeUnit: readNumber(next.tradeUnit) });
+  }
   function field(key: keyof typeof fields, label: string, min: string, max: string, step: string) {
-    return <label>{label}<input type="number" inputMode="decimal" min={min} max={max} step={step} value={fields[key]} onChange={event => { setFields(previous => ({ ...previous, [key]: event.target.value })); if (key === "balance") onBalanceChange?.(readNumber(event.target.value)); }} /></label>;
+    return <label>{label}<input type="number" inputMode="decimal" min={min} max={max} step={step} value={fields[key]} disabled={disabled} onChange={event => changeField(key, event.target.value)} /></label>;
   }
   return <Panel title="資金・リスク管理" eyebrow="CAPITAL & POSITION LIMIT" className="risk-panel">
     <p className="material-intro">{pair} · 設定した許容損失額から、条件付きプランの最大数量を計算します。</p>
     <div className="risk-settings">
       {field("balance", "現在資産（円）", "0", "1000000000000", "0.01")}
       {field("target", "目標資産（円）", "0.01", "1000000000000", "0.01")}
-      {field("riskPercent", "許容リスク率（%）", "0.0001", "100", "0.1")}
-      <label>取引単位<select value={fields.tradeUnit} onChange={event => setFields(previous => ({ ...previous, tradeUnit: event.target.value }))}><option value="1">1通貨</option><option value="100">100通貨</option><option value="1000">1,000通貨</option></select></label>
+      {field("riskPercent", "許容リスク率（%）", "0.0001", onSettingsChange ? "10" : "100", "0.1")}
+      <label>取引単位<select value={fields.tradeUnit} disabled={disabled} onChange={event => changeField("tradeUnit", event.target.value)}>{!["1", "100", "1000"].includes(fields.tradeUnit) && <option value={fields.tradeUnit}>{fields.tradeUnit}通貨</option>}<option value="1">1通貨</option><option value="100">100通貨</option><option value="1000">1,000通貨</option></select></label>
     </div>
-    <p className="footnote">設定はこの画面を開いている間だけ保持します。目標資産は最大数量に影響しません。</p>
-    {budget === null && <p className="negative" role="status">現在資産は0〜1兆円、許容リスク率は0より大きく100%以下の数値で入力してください。</p>}
+    <p className="footnote">{onSettingsChange ? "変更は入力後にクラウドへ保存します。保存状態を確認してください。" : "設定はこの画面を開いている間だけ保持します。"}目標資産は最大数量に影響しません。</p>
+    {budget === null && <p className="negative" role="status">現在資産は0〜1兆円、許容リスク率は0より大きく{onSettingsChange ? "10" : "100"}%以下の数値で入力してください。</p>}
     <div className="risk-highlights" aria-live="polite">
       <div><span>最大許容損失</span><strong data-testid="risk-budget">{money(budget)}</strong><small>現在資産 × 許容リスク率（1銭未満切り捨て）</small></div>
       <div><span>最大ポジションサイズ</span><strong data-testid="risk-max-units">{size ? `${number(size.maxUnits)}通貨` : "未算出"}</strong><small>計算上の上限 · 条件付きプランがある場合のみ</small></div>
