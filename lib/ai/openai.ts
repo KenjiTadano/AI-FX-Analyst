@@ -62,6 +62,41 @@ const isText = (value: unknown): value is string => typeof value === "string" &&
 const isList = (value: unknown): value is string[] => Array.isArray(value) && value.length <= 12 && value.every(isText);
 const factorRequired = interpretationSchema.properties.factors.items.required;
 
+/**
+ * When chart evidence is attached, models sometimes emit two `technical` factors and omit another category.
+ * Prompt already forbids this; coalesce only that case so chart-backed analysis does not fall back.
+ */
+export function coerceInterpretationFactors(value: unknown, input: AnalysisInput): unknown {
+  if (!isRecord(value) || !Array.isArray(value.factors) || value.factors.length !== 5) return value;
+  if (!input.fundamentalData.some(item => item.id === "technical:chart_image")) return value;
+  if (!value.factors.every(isRecord)) return value;
+  const technicals = value.factors.filter(factor => factor.category === "technical");
+  if (technicals.length < 2) return value;
+  const others = value.factors.filter(factor => factor.category !== "technical");
+  const present = new Set(others.map(factor => String(factor.category)));
+  if (present.size !== others.length) return value;
+  const missing = factorCategories.filter(category => category !== "technical" && !present.has(category));
+  if (technicals.length - 1 !== missing.length) return value;
+  const directions = technicals.map(factor => String(factor.direction));
+  const direction = directions.every(item => item === directions[0]) ? directions[0]!
+    : directions.includes("bullish") && directions.includes("bearish") ? "neutral"
+      : directions.find(item => item !== "unknown") ?? "unknown";
+  const evidenceIds = [...new Set(technicals.flatMap(factor => Array.isArray(factor.evidenceIds) ? factor.evidenceIds.filter(isText) : []))].slice(0, 12);
+  const reason = technicals.map(factor => (isText(factor.reason) ? factor.reason.trim() : "")).filter(Boolean).join(" / ").slice(0, 2000);
+  const title = isText(technicals[0]?.title) ? technicals[0]!.title : "テクニカル";
+  const source = isText(technicals[0]?.source) ? technicals[0]!.source : "chart_image";
+  const impact = ["high", "medium", "low"].includes(String(technicals[0]?.impact)) ? technicals[0]!.impact : "medium";
+  if (!reason || !["bullish", "bearish", "neutral", "unknown"].includes(String(direction))) return value;
+  const merged = { category: "technical", title, direction, impact, reason, source, evidenceIds };
+  const stubs = missing.map(category => ({
+    category, title: category, direction: "unknown", impact: "low", reason: "未評価", source: "未評価", evidenceIds: [] as string[],
+  }));
+  const byCategory = new Map<string, Record<string, unknown>>([[ "technical", merged ], ...others.map(factor => [String(factor.category), factor] as const), ...stubs.map(factor => [factor.category, factor] as const)]);
+  const factors = factorCategories.map(category => byCategory.get(category)).filter(Boolean);
+  if (factors.length !== 5) return value;
+  return { ...value, factors };
+}
+
 /** Safe, non-secret reason for invalid model JSON. Returns null when valid. */
 export function interpretationFailureReason(value: unknown, input: AnalysisInput): string | null {
   if (!isRecord(value)) return "root_not_object";
@@ -108,9 +143,10 @@ export function interpretationFailureReason(value: unknown, input: AnalysisInput
 }
 
 export function validateInterpretation(value: unknown, input: AnalysisInput): ModelInterpretation {
-  const reason = interpretationFailureReason(value, input);
+  const coerced = coerceInterpretationFactors(value, input);
+  const reason = interpretationFailureReason(coerced, input);
   if (reason) throw new AnalysisError("invalid_response", reason);
-  return value as unknown as ModelInterpretation;
+  return coerced as unknown as ModelInterpretation;
 }
 
 function shouldExposeValidationDetail(): boolean {

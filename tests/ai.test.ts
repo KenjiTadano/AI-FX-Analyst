@@ -7,9 +7,10 @@ import { buildInput } from "../lib/ai/input";
 import { evaluateTechnical, scoreDirection } from "../lib/ai/technical";
 import { finalizeAnalysis, signalFromScore } from "../lib/ai/engine";
 import { generateScenario, validateScenario } from "../lib/ai/scenario";
-import { AnalysisError, createOpenAI, interpretationFailureReason, interpretationSchema, systemPrompt, validateInterpretation } from "../lib/ai/openai";
+import { AnalysisError, coerceInterpretationFactors, createOpenAI, interpretationFailureReason, interpretationSchema, systemPrompt, validateInterpretation } from "../lib/ai/openai";
 import { createAnalysisService } from "../lib/ai/service";
 import { factorCategories, type AnalysisInput, type ModelInterpretation, type TradeScenario, type Direction } from "../lib/ai/types";
+import { normalizeChartAnalysis } from "../lib/chart-analysis/normalize";
 
 const now = Date.parse("2026-09-08T04:00:00Z");
 const iso = (at = now) => new Date(at).toISOString();
@@ -197,12 +198,42 @@ test("duplicate technical factors and empty source fail with actionable reasons"
     ],
   };
   assert.equal(interpretationFailureReason(duplicatedWithinFive, snapshot), "factor_1_duplicate_category:technical");
+  assert.throws(() => validateInterpretation(duplicatedWithinFive, snapshot));
   const emptySource = structuredClone(valid);
   emptySource.factors[1].source = "";
   assert.equal(interpretationFailureReason(emptySource, snapshot), "factor_1_bad_source");
   assert.match(JSON.stringify(interpretationSchema.properties.factors), /"minItems":5/);
   assert.match(JSON.stringify(interpretationSchema.properties.factors), /"maxItems":5/);
   assert.match(JSON.stringify(interpretationSchema.properties.factors.items.properties.source), /"minLength":1/);
+});
+test("chart-backed duplicate technical factors are coalesced before validation", () => {
+  const chart = normalizeChartAnalysis({
+    detected: { pair: "米ドル/円", timeframe: "15分足", chartType: "candlestick", currentPrice: 154.2 },
+    trend: { direction: "down", confidence: 80, reason: "高値切り下げ" },
+    structure: { higherHigh: false, higherLow: false, lowerHigh: true, lowerLow: true },
+    levels: { support: [153.8], resistance: [154.5] },
+    patterns: [], indicators: [], observations: ["押し目弱い"], warnings: [],
+    dataQuality: { score: 90, imageReadable: true, pairDetected: true, timeframeDetected: true },
+  }, "USD/JPY", "TEST", now);
+  const snapshot = buildInput("USD/JPY", market(), fundamentals(), now, chart);
+  assert.ok(snapshot.fundamentalData.some(item => item.id === "technical:chart_image"));
+  const valid = interpretation(snapshot);
+  const duplicatedWithinFive = {
+    ...valid,
+    factors: [
+      valid.factors[0],
+      { ...valid.factors[0], title: "チャート画像", direction: "bearish" as const, source: "chart_image", evidenceIds: ["technical:chart_image"] },
+      valid.factors[2],
+      valid.factors[3],
+      valid.factors[4],
+    ],
+  };
+  assert.equal(interpretationFailureReason(duplicatedWithinFive, snapshot), "factor_1_duplicate_category:technical");
+  const coerced = coerceInterpretationFactors(duplicatedWithinFive, snapshot) as ModelInterpretation;
+  assert.equal(interpretationFailureReason(coerced, snapshot), null);
+  assert.equal(validateInterpretation(duplicatedWithinFive, snapshot).factors.filter(factor => factor.category === "technical").length, 1);
+  assert.equal(validateInterpretation(duplicatedWithinFive, snapshot).factors.length, 5);
+  assert.match(validateInterpretation(duplicatedWithinFive, snapshot).factors.find(factor => factor.category === "technical")!.reason, /\//);
 });
 test("FRED macro evidence can ground economic factor even when calendar DQ is missing", () => {
   const snapshot = buildInput("USD/JPY", market(), fundamentals(), now);

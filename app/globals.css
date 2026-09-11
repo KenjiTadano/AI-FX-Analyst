@@ -272,3 +272,42 @@ h2 { font-size: 17px; font-weight: 600; margin-top: 4px; }
 .chart-ai-banner { margin-bottom: 16px; padding: 12px 14px; border: 1px solid #405169; border-radius: 8px; background: #132033; }
 .chart-ai-banner p { margin: 0 0 10px; font-size: 13px; line-height: 1.6; }
 .used-data-grid { margin-top: 10px; }
+
+/* Task012 AI decision explanation */
+.decision-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+.decision-pair { margin: 0; font-size: 13px; letter-spacing: .4px; }
+.decision-live-rate { margin: 4px 0 0; font-size: 18px; font-variant-numeric: tabular-nums; }
+.decision-live-rate strong { font-size: 28px; font-weight: 600; letter-spacing: -1px; }
+.decision-hero { display: grid; gap: 16px; margin: 8px 0 18px; }
+.decision-meta-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.decision-meta-grid > div { min-width: 0; border: 1px solid var(--border); border-radius: 8px; padding: 12px; background: #0d1623; }
+.decision-meta-grid span { display: block; font-size: 11px; margin-bottom: 6px; }
+.decision-meta-grid strong { display: block; font-size: 16px; overflow-wrap: anywhere; }
+.decision-meta-grid small { display: block; margin-top: 4px; }
+.decision-confidence { width: 100%; height: 6px; margin-top: 10px; accent-color: var(--amber); }
+.decision-summary { margin: 0 0 16px; }
+.decision-now, .decision-wait-reasons, .decision-position { margin: 16px 0; padding: 14px; border: 1px solid var(--border); border-radius: 10px; background: #0d1623; }
+.decision-now h3, .decision-wait-reasons h3, .decision-position h3, .scenario-decision-panel h3 { margin: 0 0 8px; font-size: 13px; font-weight: 600; }
+.decision-now p, .decision-position p { margin: 0; font-size: 15px; line-height: 1.7; overflow-wrap: anywhere; }
+.decision-event { margin: 14px 0; padding: 12px 14px; border: 1px solid #6a5230; border-radius: 8px; background: #241c12; color: #f0d9a8; }
+.decision-event p { margin: 0; }
+.decision-event .footnote { color: #d8c8a7; margin-top: 6px; }
+.scenario-stance { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+.evidence-split { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.why-factors { margin-bottom: 8px; }
+.chart-actions .journal-primary, .decision-actions-top .journal-primary { background: #205346; border-color: #65d9bc; color: #defcf3; }
+@media (min-width: 1000px) {
+  .dashboard-grid.decision-layout > .decision-panel { grid-column: span 2; }
+  .dashboard-grid.decision-layout > .scenario-decision-panel { grid-column: span 1; }
+  .dashboard-grid.decision-layout > .reasons-panel { grid-column: span 2; }
+}
+@media (max-width: 800px) {
+  .decision-meta-grid { grid-template-columns: 1fr; }
+  .evidence-split { grid-template-columns: 1fr; }
+  .decision-live-rate strong { font-size: 24px; }
+}
+@media (max-width: 540px) {
+  .decision-header { flex-direction: column; }
+  .decision-actions-top, .decision-actions-top button { width: 100%; }
+  .signal-word { font-size: 32px; white-space: normal; }
+}
