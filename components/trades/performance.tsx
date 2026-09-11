@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
-import { dailyPnl, dayKey, equityCurve, monthCells, pairPerformance, signalPerformance, summarize } from "@/lib/trades/analytics";
+import { alignmentPerformance, chartEvidencePerformance, confidenceBandPerformance, dailyPnl, dayKey, equityCurve, monthCells, pairPerformance, signalPerformance, summarize } from "@/lib/trades/analytics";
+import { alignmentLabels } from "@/lib/trades/snapshot";
 import type { Trade } from "@/lib/trades/types";
 import { Panel } from "../dashboard/panels";
 import { TradeList } from "./trade-list";
@@ -31,9 +32,20 @@ export function Performance({ trades, initialBalance }: { trades: Trade[]; initi
       <div className="pnl-calendar">{["月", "火", "水", "木", "金", "土", "日"].map(d => <span className="calendar-weekday" key={d}>{d}</span>)}{monthCells(month).map((date, i) => date ? <button key={date} aria-label={`${date} ${days[date] ? money(days[date].pnl, true) : "取引なし"}`} aria-pressed={day === date} className={days[date] ? tone(days[date].pnl) : "muted"} onClick={() => setDay(date)}><span>{Number(date.slice(-2))}</span><small>{days[date] ? money(days[date].pnl, true) : "—"}</small></button> : <span key={`empty-${i}`} />)}</div>
       {day && <section className="day-trades"><h3>{day} の決済</h3><TradeList trades={days[day]?.trades ?? []} quote={null} now={0} /></section>}
     </Panel>
+    <Panel title="AI判断との一致別" eyebrow="AI ALIGNMENT" className="journal-wide">
+      <p className="footnote">登録時スナップショットと取引方向から計算します。現在のAI状態ではありません。WAIT中エントリーは特に重要です。</p>
+      <div className="performance-cards">{alignmentPerformance(trades).map(group => <article key={group.alignment}><h3>{alignmentLabels[group.alignment]}</h3><strong className={tone(group.totalPnl)}>{money(group.totalPnl, true)}</strong><p>{group.count}取引 · 勝率 {group.winRate === null ? "—" : `${group.winRate.toFixed(1)}%`}</p>{group.count === 0 ? <small className="muted">データなし</small> : group.insufficientData && <small className="neutral">参考値（データ不足）</small>}</article>)}</div>
+    </Panel>
     <Panel title="AI判断別成績" eyebrow="SIGNAL REVIEW" className="journal-wide">
-      <p className="footnote">実際に手動記録した取引の集計です。AIの推奨方向と異なる取引も含み、AI単独の予測精度ではありません。AI未取得時の待機表示も含みます。10件未満は「データ不足」。</p>
+      <p className="footnote">登録時snapshotのsignalを使用します。AIの推奨方向と異なる取引も含み、AI単独の予測精度ではありません。10件未満は「データ不足」。</p>
       <div className="performance-cards">{signalPerformance(trades).map(group => <article key={group.signal}><h3>{signalLabels[group.signal]}</h3><strong className={tone(group.totalPnl)}>{money(group.totalPnl, true)}</strong><p>{group.count}取引 · 勝率 {group.winRate === null ? "—" : `${group.winRate.toFixed(1)}%`}</p>{group.insufficientData && <small className="neutral">データ不足</small>}</article>)}</div>
+    </Panel>
+    <Panel title="Chart Evidence別" eyebrow="CHART USED" className="journal-wide">
+      <div className="performance-cards">{chartEvidencePerformance(trades).map(group => <article key={group.key}><h3>{group.label}</h3><strong className={tone(group.totalPnl)}>{money(group.totalPnl, true)}</strong><p>{group.count}取引 · 勝率 {group.winRate === null ? "—" : `${group.winRate.toFixed(1)}%`}</p>{group.count === 0 ? <small className="muted">データなし</small> : group.insufficientData && <small className="neutral">参考値</small>}</article>)}</div>
+    </Panel>
+    <Panel title="確信度帯別（参考）" eyebrow="CONFIDENCE BANDS" className="journal-wide">
+      <p className="footnote">サンプルが少ない場合は参考値です。</p>
+      <div className="performance-cards">{confidenceBandPerformance(trades).map(group => <article key={group.band}><h3>{group.band}%</h3><strong className={tone(group.totalPnl)}>{money(group.totalPnl, true)}</strong><p>{group.count}取引 · 勝率 {group.winRate === null ? "—" : `${group.winRate.toFixed(1)}%`}</p>{group.referenceOnly && <small className="neutral">参考値</small>}</article>)}</div>
     </Panel>
     <Panel title="通貨ペア別成績" eyebrow="PAIR REVIEW" className="journal-wide"><div className="performance-cards">{pairPerformance(trades).map(group => <article key={group.pair}><h3>{group.pair}</h3><strong className={tone(group.totalPnl)}>{money(group.totalPnl, true)}</strong><p>{group.count}取引 · 勝率 {group.winRate === null ? "—" : `${group.winRate.toFixed(1)}%`}</p></article>)}</div></Panel>
   </div>;

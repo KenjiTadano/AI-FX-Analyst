@@ -1,6 +1,6 @@
-import { tradeSignals } from "../ai/types";
 import { pairs, type Trade, type TradeDraft, type TradeAnalysisSnapshot, type Result } from "./types";
 import { pnl, validPrice, validQuantity } from "./calculations";
+import { sanitizePersistedSnapshot } from "./snapshot";
 const object = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
 export function validDate(v: unknown): v is string {
   if (typeof v !== "string" || Number(v.slice(0, 4)) < 1000 || !/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/.test(v)) return false;
@@ -19,15 +19,14 @@ export function validateDraft(v: unknown): Result<TradeDraft> {
   return { data: { pair, side, status, quantity, entryPrice, exitPrice, openedAt, closedAt, stopLoss, takeProfit, notes } as TradeDraft, error: null };
 }
 function validSnapshot(v: unknown): v is TradeAnalysisSnapshot {
-  if (!object(v)) return false;
-  const bounded = (n: unknown, min: number, max: number) => typeof n === "number" && Number.isFinite(n) && n >= min && n <= max;
-  return pairs.includes(v.pair as never) && tradeSignals.includes(v.signal as never) && bounded(v.score, -100, 100) && bounded(v.confidence, 0, 100) && bounded(v.dataQualityScore, 0, 100) && typeof v.summary === "string" && v.summary.length <= 10000 && validDate(v.analyzedAt) && validDate(v.capturedAt) && validDate(v.expiresAt) && ["available", "unavailable", "error"].includes(v.aiStatus as string) && (v.model === null || typeof v.model === "string" && v.model.length <= 200) && [v.bullishReasons, v.bearishReasons].every(a => Array.isArray(a) && a.length <= 30 && a.every(t => typeof t === "string" && t.length <= 4000));
+  return sanitizePersistedSnapshot(v) !== null;
 }
 export function validateTrade(v: unknown): Result<Trade> {
   const draft = validateDraft(v);
   if (!draft.data || !object(v)) return { data: null, error: draft.error ?? "取引が不正です。" };
-  if (typeof v.id !== "string" || !v.id || v.id.length > 100 || !validDate(v.createdAt) || !validDate(v.updatedAt) || Date.parse(v.updatedAt) < Date.parse(v.createdAt) || (v.analysisSnapshot !== null && !validSnapshot(v.analysisSnapshot))) return { data: null, error: "記録のID・保存日時・AIスナップショットが不正です。" };
+  const snapshot = v.analysisSnapshot === null || v.analysisSnapshot === undefined ? null : sanitizePersistedSnapshot(v.analysisSnapshot);
+  if (typeof v.id !== "string" || !v.id || v.id.length > 100 || !validDate(v.createdAt) || !validDate(v.updatedAt) || Date.parse(v.updatedAt) < Date.parse(v.createdAt) || (v.analysisSnapshot != null && (snapshot === null || !validSnapshot(snapshot)))) return { data: null, error: "記録のID・保存日時・AIスナップショットが不正です。" };
   const realizedPnl = draft.data.status === "closed" ? pnl(draft.data.side, draft.data.entryPrice, draft.data.exitPrice!, draft.data.quantity) : null;
   if (v.realizedPnl !== realizedPnl) return { data: null, error: "保存された損益と取引価格が一致しません。" };
-  return { data: { ...draft.data, id: v.id, createdAt: v.createdAt, updatedAt: v.updatedAt, analysisSnapshot: v.analysisSnapshot as TradeAnalysisSnapshot | null, realizedPnl }, error: null };
+  return { data: { ...draft.data, id: v.id, createdAt: v.createdAt, updatedAt: v.updatedAt, analysisSnapshot: snapshot, realizedPnl }, error: null };
 }

@@ -1,6 +1,7 @@
 import { tradeSignals } from "../ai/types";
 import { plannedRiskReward } from "./calculations";
-import { pairs, type Trade } from "./types";
+import { computeAiAlignment, isRichSnapshot } from "./snapshot";
+import { pairs, type AiAlignment, type Trade } from "./types";
 const sumMoney = (values: number[]) => values.reduce((sum, n) => sum + Math.round(n * 100), 0) / 100;
 export function summarize(trades: Trade[]) {
   const closed = trades.filter(t => t.status === "closed" && t.realizedPnl !== null);
@@ -31,6 +32,41 @@ export function signalPerformance(trades: Trade[]) {
   });
 }
 export function pairPerformance(trades: Trade[]) { return pairs.map(pair => ({ pair, ...summarize(trades.filter(t => t.pair === pair)) })); }
+export function alignmentPerformance(trades: Trade[]) {
+  return (["aligned", "contrary", "wait_override", "neutral", "unavailable"] as const satisfies readonly AiAlignment[]).map(alignment => {
+    const selected = trades.filter(t => computeAiAlignment(t.side, t.analysisSnapshot, t.pair) === alignment);
+    const stats = summarize(selected);
+    return { alignment, ...stats, insufficientData: stats.count < 10 };
+  });
+}
+export function chartEvidencePerformance(trades: Trade[]) {
+  return ([{ key: "used", label: "Chart Evidence使用" }, { key: "unused", label: "Chart Evidence未使用" }] as const).map(group => {
+    const selected = trades.filter(t => {
+      const snap = t.analysisSnapshot;
+      if (!snap || snap.pair !== t.pair) return false;
+      const used = isRichSnapshot(snap) ? !!snap.chartEvidence?.used : false;
+      return group.key === "used" ? used : !used;
+    });
+    const stats = summarize(selected);
+    return { key: group.key, label: group.label, ...stats, insufficientData: stats.count < 10 };
+  });
+}
+export function confidenceBandPerformance(trades: Trade[]) {
+  const bands = [
+    { key: "0-49", min: 0, max: 49 },
+    { key: "50-69", min: 50, max: 69 },
+    { key: "70-84", min: 70, max: 84 },
+    { key: "85-100", min: 85, max: 100 },
+  ] as const;
+  return bands.map(band => {
+    const selected = trades.filter(t => {
+      const snap = t.analysisSnapshot;
+      return !!snap && snap.pair === t.pair && snap.confidence >= band.min && snap.confidence <= band.max;
+    });
+    const stats = summarize(selected);
+    return { band: band.key, ...stats, referenceOnly: stats.count < 10 };
+  });
+}
 export function monthCells(month: string): (string | null)[] {
   if (!/^[1-9]\d{3}-(0[1-9]|1[0-2])$/.test(month)) return [];
   const [year, m] = month.split("-").map(Number);

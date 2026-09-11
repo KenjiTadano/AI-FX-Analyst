@@ -311,3 +311,11 @@ h2 { font-size: 17px; font-weight: 600; margin-top: 4px; }
   .decision-actions-top, .decision-actions-top button { width: 100%; }
   .signal-word { font-size: 32px; white-space: normal; }
 }
+
+/* Task013 trade AI snapshot */
+.snapshot-preview { margin: 16px 0; padding: 14px; border: 1px solid var(--border); border-radius: 10px; background: #0d1623; }
+.snapshot-toggle { display: flex; gap: 8px; align-items: center; font-size: 13px; margin-bottom: 10px; }
+.snapshot-card { font-size: 12px; line-height: 1.8; color: #c5d2e3; }
+.snapshot-card p { margin: 4px 0; overflow-wrap: anywhere; }
+.snapshot-detail { font-size: 12px; line-height: 1.8; color: #c5d2e3; }
+.snapshot-detail p { margin: 6px 0; overflow-wrap: anywhere; }
