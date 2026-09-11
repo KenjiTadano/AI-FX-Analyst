@@ -1,15 +1,17 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { DataResource, EconomicEvent, FundamentalData, Importance, NewsItem } from "@/lib/fundamental/types";
+import type { DataResource, FundamentalData, Importance, NewsItem } from "@/lib/fundamental/types";
+import { EconomicCalendar } from "./economic-calendar";
+import { UsMacroPanel } from "./us-macro";
 import { Panel } from "./panels";
 
 const importanceLabels: Record<Importance, string> = { high: "高", medium: "中", low: "低" };
 const importanceOrder = { high: 0, medium: 1, low: 2 };
 const dateTime = (value: string) => new Intl.DateTimeFormat("ja-JP", { timeZone: "Asia/Tokyo", month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date(value));
-const formatValue = (value: number | null, unit: string | null) => value === null ? "未取得" : `${value.toLocaleString("ja-JP")}${unit ? ` ${unit}` : ""}`;
 
-function useFundamentals(symbol: string) {
+
+export function useFundamentals(symbol: string) {
   const [result, setResult] = useState<{ symbol: string; data: FundamentalData | null; error: string | null } | null>(null);
   useEffect(() => {
     const controller = new AbortController();
@@ -52,23 +54,17 @@ function ImportanceBadge({ value }: { value: Importance }) {
 function NewsCard({ item }: { item: NewsItem }) {
   return <li className="material-item"><div className="row"><span className="currency-tags">{item.currencies.join(" / ")}</span><ImportanceBadge value={item.importance} /></div><h4><a href={item.url} target="_blank" rel="noopener noreferrer">{item.title}<span aria-hidden="true"> ↗</span></a></h4><p className="material-source">{item.source} · {dateTime(item.publishedAt)} JST</p><details><summary>概要・関連性を見る</summary><p>{item.summary ?? "配信元の概要はありません。"}</p><p className="footnote">{item.reason}</p></details></li>;
 }
-function CalendarCard({ event }: { event: EconomicEvent }) {
-  const labels = { upcoming: "発表前", released: "発表済み", awaiting_actual: "予定時刻経過・実績未取得", unknown: "発表時刻未確認" };
-  return <li className="material-item"><div className="row"><span className="currency-tags">{event.currency} / {event.country}</span><ImportanceBadge value={event.importance} /></div><h4>{event.name}</h4><p className="event-time">{event.scheduledAt ? `${dateTime(event.scheduledAt)} JST` : event.rawScheduledAt ? `${event.rawScheduledAt}（時刻基準未確認）` : "発表日時未取得"}</p><span className="material-source">{labels[event.status]}{event.isKeyIndicator ? " · 主要指標" : ""}</span><dl className="event-values"><div><dt>予想</dt><dd>{formatValue(event.forecast, event.unit)}</dd></div><div><dt>前回</dt><dd>{formatValue(event.previous, event.unit)}</dd></div><div><dt>実績</dt><dd>{formatValue(event.actual, event.unit)}</dd></div></dl></li>;
-}
-export function FundamentalPanel({ symbol }: { symbol: string }) {
-  const result = useFundamentals(symbol);
+export function FundamentalPanel({ symbol, result }: { symbol: string; result: ReturnType<typeof useFundamentals> }) {
+  const [now, setNow] = useState(0);
+  useEffect(() => { const timer = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(timer); }, []);
   const data = result?.data;
   const news = [...(data?.news.data ?? [])].sort((a, b) => importanceOrder[a.importance] - importanceOrder[b.importance] || b.publishedAt.localeCompare(a.publishedAt));
-  const events = [...(data?.calendar.data ?? [])].sort((a, b) => {
-    const rank = (event: EconomicEvent) => event.status === "upcoming" ? 0 : event.status === "unknown" ? 1 : 2;
-    return rank(a) - rank(b) || importanceOrder[a.importance] - importanceOrder[b.importance] || (a.scheduledAt ?? a.rawScheduledAt ?? "").localeCompare(b.scheduledAt ?? b.rawScheduledAt ?? "");
-  });
   return <Panel title="マーケット材料" eyebrow="FUNDAMENTALS / NEWS & EVENTS" className="fundamental-panel">
     <p className="material-intro">{symbol} に関連するニュースと発表予定。売買方向はまだ評価していません。</p>
     <div className="material-grid">
       <section className="material-category" aria-label="重要ニュース"><div className="material-heading"><span className="reason-number">01</span><h3>重要ニュース</h3><span className="mini-label">NEWS</span></div><ResourceNote resource={data?.news} label="ニュース" error={result?.error} /><ul>{news.slice(0, 3).map(item => <NewsCard key={item.id} item={item} />)}</ul>{news.length > 3 && <details className="material-more"><summary>ほか{news.length - 3}件を見る</summary><ul>{news.slice(3).map(item => <NewsCard key={item.id} item={item} />)}</ul></details>}<ResourceFooter resource={data?.news} /><p className="footnote">直近7日 · 重要度は語句による表示優先度です。</p></section>
-      <section className="material-category" aria-label="経済指標"><div className="material-heading"><span className="reason-number">02</span><h3>経済指標</h3><span className="mini-label">CALENDAR</span></div><ResourceNote resource={data?.calendar} label="経済指標" error={result?.error} /><ul>{events.slice(0, 3).map(event => <CalendarCard key={event.id} event={event} />)}</ul>{events.length > 3 && <details className="material-more"><summary>ほか{events.length - 3}件を見る</summary><ul>{events.slice(3).map(event => <CalendarCard key={event.id} event={event} />)}</ul></details>}<ResourceFooter resource={data?.calendar} /><p className="footnote">前日〜7日先の取得範囲 · 配信状況により未掲載・遅延があります。</p></section>
+      <EconomicCalendar resource={data?.calendar} now={now} error={result?.error} />
+      <UsMacroPanel resource={data?.macroeconomic} symbol={symbol} error={result?.error} />
       <section className="material-category" aria-label="中央銀行"><div className="material-heading"><span className="reason-number">03</span><h3>中央銀行</h3><span className="mini-label">POLICY</span></div>{!data?.centralBanks.data && <ResourceNote resource={data?.centralBanks} label="中央銀行情報" error={result?.error} />}{data?.centralBanks.data?.map(bank => <article className="material-item" key={bank.currency}><div className="row"><h4>{bank.abbreviation}<small> / {bank.currency}</small></h4><span className="badge">{bank.policyRate.value ? `${bank.policyRate.value.lower}${bank.policyRate.value.upper !== null ? `–${bank.policyRate.value.upper}` : ""}%` : "金利未取得"}</span></div><p className="material-source">{bank.name}</p><dl className="bank-details"><div><dt>次回会合候補</dt><dd>{bank.nextMeeting.value ? `${dateTime(bank.nextMeeting.value)} JST` : "未取得"}</dd></div><div><dt>政策方向</dt><dd>{bank.policyDirection.value ? { hike: "利上げ", cut: "利下げ", hold: "据え置き" }[bank.policyDirection.value] : "未評価"}</dd></div></dl>{bank.relatedNewsIds.length > 0 && <details><summary>関連ニュース {bank.relatedNewsIds.length}件</summary><ul>{bank.relatedNewsIds.map(id => { const item = data?.news.data?.find(news => news.id === id); return item ? <li key={id}><a href={item.url} target="_blank" rel="noopener noreferrer">{item.title} ↗</a></li> : null; })}</ul></details>}</article>)}<ResourceFooter resource={data?.centralBanks} /></section>
       <section className="material-category" aria-label="市場環境"><div className="material-heading"><span className="reason-number">04</span><h3>市場環境</h3><span className="mini-label">SENTIMENT</span></div>{!data?.sentiment.data ? <ResourceNote resource={data?.sentiment} label="市場環境" error={result?.error} /> : <><div className="environment-value">{data.sentiment.data.market.value ? { "risk-on": "Risk On", neutral: "Neutral", "risk-off": "Risk Off" }[data.sentiment.data.market.value] : "未取得"}</div><p className="footnote">{data.sentiment.data.market.reason}</p><dl className="bank-details">{data.sentiment.data.currencies.map(item => <div key={item.currency}><dt>{item.currency}</dt><dd>{item.sentiment.value ? { bullish: "強気", neutral: "中立", bearish: "弱気" }[item.sentiment.value] : "未評価"}</dd></div>)}</dl><p className="footnote">取得できない情報を「中立」や売買シグナルで補完しません。</p></>}</section>
     </div>

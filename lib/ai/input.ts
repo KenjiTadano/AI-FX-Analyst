@@ -1,10 +1,28 @@
+import { calendarKnown, riskState, windowFor } from "../economic-calendar/risk-window";
+import { surprise } from "../economic-calendar/normalize";
+import { FRED_SERIES_COUNT } from "../fundamental/fred-series";
 import type { MarketData, Symbol } from "../market/types";
-import type { FundamentalData } from "../fundamental/types";
+import type { DataResource, EconomicIndicatorValue, FundamentalData } from "../fundamental/types";
 import { currentRate, evaluateTechnical, fresh } from "./technical";
-import type { AnalysisInput, DataQuality, Evidence, FactorCategory } from "./types";
+import type { AnalysisInput, Availability, DataQuality, Evidence, FactorCategory } from "./types";
 
 export const categoryLabels: Record<FactorCategory, string> = { technical: "テクニカル", news: "ニュース", economic: "経済指標", central_bank: "中央銀行", market_environment: "市場環境" };
 const weights: Record<FactorCategory, number> = { technical: 40, news: 20, economic: 20, central_bank: 10, market_environment: 10 };
+
+export function macroeconomicQuality(resource: DataResource<EconomicIndicatorValue[]> | null | undefined): DataQuality["macroeconomicData"] {
+  if (!resource || resource.status === "unavailable" || resource.status === "error" || resource.status === "empty" || !resource.data?.length) {
+    return { status: "missing", detail: "米国マクロ: 未取得", fraction: 0 };
+  }
+  const count = resource.data.filter(item => item.value !== null && item.observationDate).length;
+  const fraction = Math.min(1, count / FRED_SERIES_COUNT);
+  const status: Availability = count >= FRED_SERIES_COUNT && resource.warnings.length === 0 ? "ok" : count > 0 ? "partial" : "missing";
+  return {
+    status,
+    detail: status === "ok" ? "米国マクロ: 取得済み" : status === "partial" ? "米国マクロ: 一部不足" : "米国マクロ: 未取得",
+    fraction,
+  };
+}
+
 export function buildInput(pair: Symbol, market: MarketData | null, fundamentals: FundamentalData | null, now = Date.now()): AnalysisInput {
   if (market?.symbol !== pair) market = null;
   if (fundamentals?.symbol !== pair) fundamentals = null;
@@ -13,20 +31,43 @@ export function buildInput(pair: Symbol, market: MarketData | null, fundamentals
   const evidence: Evidence[] = technicalAnalysis.frames.filter(frame => frame.available).map(frame => ({ id: `technical:${frame.timeframe}`, categories: ["technical"], source: "Twelve Data", title: `${frame.timeframe} technical`, observedAt: frame.lastClosedAt, data: frame }));
   const news = fundamentals?.news;
   const calendar = fundamentals?.calendar;
+  const macroeconomic = fundamentals?.macroeconomic;
   const newsFresh = !!news && ["ok", "empty"].includes(news.status) && fresh(news.fetchedAt, 15 * 60_000, now);
-  const calendarFresh = !!calendar && ["ok", "empty"].includes(calendar.status) && fresh(calendar.fetchedAt, 60 * 60_000, now);
+  const calendarFresh = calendarKnown(calendar, now);
   const newsItems = newsFresh ? (news.data ?? []).slice(0, 10) : [];
   newsItems.forEach((item, index) => {
     const bankRelated = fundamentals?.centralBanks.data?.some(bank => bank.relatedNewsIds.includes(item.id));
     evidence.push({ id: `news:${index}`, categories: bankRelated ? ["news", "central_bank"] : ["news"], title: item.title.slice(0, 300), source: item.source.slice(0, 100), observedAt: item.publishedAt, data: { summary: item.summary?.slice(0, 800) ?? null, affectedCurrencies: item.affectedCurrencies, importance: item.importance, impactDirection: item.impactDirection } });
   });
-  const events = calendarFresh ? (calendar.data ?? []) : [];
+  const events = calendarFresh ? (calendar!.data ?? []).filter(event => pair.split("/").includes(event.currency)) : [];
   // Keep imminent events in the bounded model input before less urgent records.
   const sortedEvents = [...events].sort((a, b) => {
     const distance = (at: string | null) => at ? Math.abs(Date.parse(at) - now) : Number.MAX_SAFE_INTEGER;
     return distance(a.scheduledAt) - distance(b.scheduledAt);
   }).slice(0, 20);
-  sortedEvents.forEach((item, index) => evidence.push({ id: `economic:${index}`, categories: ["economic"], title: item.name.slice(0, 300), source: item.source, observedAt: calendar?.fetchedAt ?? null, data: { currency: item.currency, country: item.country, scheduledAt: item.scheduledAt, rawScheduledAt: item.rawScheduledAt, timezone: item.timezone, previous: item.previous, forecast: item.forecast, actual: item.actual, unit: item.unit, importance: item.importance, status: item.status } }));
+  sortedEvents.forEach((item, index) => evidence.push({ id: `economic:${index}`, categories: ["economic"], title: item.name.slice(0, 300), source: item.source, observedAt: calendar?.fetchedAt ?? null, data: { currency: item.currency, country: item.country, scheduledAt: item.scheduledAt, rawScheduledAt: item.rawScheduledAt, timezone: item.timezone, previous: item.previous, forecast: item.forecast, actual: item.actual, unit: item.unit, importance: item.importance, status: item.status, minutesUntil: item.scheduledAt ? (Date.parse(item.scheduledAt) - now) / 60_000 : null, inRiskWindow: riskState([item], now).imminent, riskWindow: windowFor(item), surprise: surprise(item) } }));
+  const macroItems = macroeconomic && ["ok", "empty"].includes(macroeconomic.status) ? (macroeconomic.data ?? []).filter(item => item.value !== null && item.observationDate) : [];
+  macroItems.slice(0, 12).forEach((item, index) => evidence.push({
+    id: `macro:${index}`,
+    categories: ["economic"],
+    title: item.name.slice(0, 300),
+    source: "FRED",
+    observedAt: item.observationDate,
+    data: {
+      kind: "released_macro_observation",
+      seriesId: item.seriesId,
+      latestValue: item.value,
+      previousValue: item.previousValue,
+      unit: item.unit,
+      frequency: item.frequency,
+      observationDate: item.observationDate,
+      previousObservationDate: item.previousObservationDate,
+      stale: item.stale,
+      ageDays: item.ageDays,
+      transformation: item.transformation,
+      note: "FRED発表済み実績。市場予想・速報・将来値ではない。",
+    },
+  }));
   const banks = fundamentals?.centralBanks.data ?? [];
   let bankObservations = 0;
   for (const bank of banks) {
@@ -46,9 +87,11 @@ export function buildInput(pair: Symbol, market: MarketData | null, fundamentals
       evidence.push({ id: `sentiment:${item.id}`, categories: ["market_environment"], title: item.id, source: item.observation.source ?? "sentiment provider", observedAt: item.observation.asOf, data: { subject: item.id, value: item.observation.value } });
     }
   }
+  const macroQuality = macroeconomicQuality(macroeconomic);
   const fractions: Record<FactorCategory, number> = {
     technical: (rate !== null ? 0.2 : 0) + technicalAnalysis.frames.reduce((sum, frame) => sum + frame.completeness * 0.8 / 3, 0),
     news: newsItems.length ? 1 : newsFresh ? 0.5 : 0,
+    // Keep calendar-driven economic quality unchanged; FRED is tracked separately as macroeconomicData.
     economic: events.length ? events.reduce((sum, item) => sum + (item.scheduledAt ? 0.5 : 0) + (item.previous !== null ? 0.25 : 0) + (item.forecast !== null || item.actual !== null ? 0.25 : 0), 0) / events.length : calendarFresh ? 0.5 : 0,
     central_bank: Math.min(1, bankObservations / 6 * 0.75 + (evidence.some(item => item.categories.includes("central_bank") && item.id.startsWith("news:")) ? 0.25 : 0)),
     market_environment: Math.min(1, sentimentCount / 3),
@@ -57,21 +100,16 @@ export function buildInput(pair: Symbol, market: MarketData | null, fundamentals
     const status = fraction >= 0.999 ? "ok" : fraction > 0 ? "partial" : "missing";
     return [category, { status, fraction, detail: `${categoryLabels[category as FactorCategory]}: ${status === "ok" ? "取得済み" : status === "partial" ? "一部不足・対象材料なし" : "未取得・期限切れ"}` }];
   })) as DataQuality["categories"];
-  const dataAvailability: DataQuality = { score: Math.round(Object.entries(fractions).reduce((sum, [category, fraction]) => sum + weights[category as FactorCategory] * fraction, 0)), missingData: Object.values(categories).filter(category => category.status !== "ok").map(category => category.detail), categories };
-  const eventRisk: AnalysisInput["eventRisk"] = { imminent: false, uncertainTime: false, nextRiskAt: null, reasons: [] };
-  for (const event of events.filter(item => item.importance === "high")) {
-    if (event.scheduledAt) {
-      const until = Date.parse(event.scheduledAt) - now;
-      if (event.actual === null && until > 30 * 60_000) {
-        const riskAt = Date.parse(event.scheduledAt) - 30 * 60_000;
-        if (!eventRisk.nextRiskAt || riskAt < Date.parse(eventRisk.nextRiskAt)) eventRisk.nextRiskAt = new Date(riskAt).toISOString();
-      }
-      if (until >= -15 * 60_000 && until <= 30 * 60_000 && event.actual === null) { eventRisk.imminent = true; eventRisk.reasons.push(`${event.name}: 重要指標の発表直前、または発表後の実績待ちです。`); }
-    } else {
-      // Do not guess timezone or assume a scheduled release is safely in the past.
-      eventRisk.uncertainTime = true;
-      eventRisk.reasons.push(`${event.name}: 重要指標の発表時刻を確認できません。`);
-    }
-  }
+  const missingData = [
+    ...Object.values(categories).filter(category => category.status !== "ok").map(category => category.detail),
+    ...(macroQuality.status !== "ok" ? [macroQuality.detail] : []),
+  ];
+  const dataAvailability: DataQuality = {
+    score: Math.round(Object.entries(fractions).reduce((sum, [category, fraction]) => sum + weights[category as FactorCategory] * fraction, 0)),
+    missingData,
+    categories,
+    macroeconomicData: macroQuality,
+  };
+  const eventRisk: AnalysisInput["eventRisk"] = { ...riskState(events, now), events, known: calendarFresh };
   return { pair, currentRate: rate, technicalAnalysis, fundamentalData: evidence, dataAvailability, timestamp: new Date(now).toISOString(), eventRisk };
 }

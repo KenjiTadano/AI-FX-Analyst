@@ -42,6 +42,8 @@ export function AIOverview({ response, pair }: { response: AnalysisResponse | nu
   return <>
     <Panel title="AI総合判定" eyebrow="AI SIGNAL / STRUCTURED ANALYSIS" className="signal-panel">
       <div className="signal-result"><div><span className={`signal-word ${tone(signal)}`} data-testid="ai-signal">{signalLabels[signal]}</span><p className="muted">{pair} の総合分析</p></div><div className="score"><strong>{data ? `${data.score > 0 ? "+" : ""}${data.score}` : "—"}</strong><small>方向スコア / −100〜+100</small></div></div>
+      {data?.directionSignal && <p className="footnote">相場方向：{signalLabels[data.directionSignal]} / 現在の行動：{signalLabels[signal]}（{expired ? "WAIT" : data.action ?? "WAIT"}）</p>}
+      {data?.economicRisk?.active && <p className="neutral" role="status">経済指標のリスク時間帯です。新規エントリーは待機します。</p>}
       <ol className="signal-scale" aria-label="5段階のAI総合判定">{tradeSignals.map(item => <li key={item} className={signal === item ? `selected ${tone(item)}` : ""} aria-current={signal === item ? "step" : undefined}>{signalLabels[item]}</li>)}</ol>
       <div className="ai-confidence"><span>確信度 <strong>{data ? `${data.confidence}%` : "—"}</strong></span><span>データ充足率 <strong>{data ? `${data.dataQuality.score}%` : "—"}</strong></span></div>
       {message && <p className="footnote neutral" role="status">{message}</p>}
@@ -67,7 +69,7 @@ export function AIExplanation({ response }: { response: AnalysisResponse | null 
     <Panel title="判断理由" eyebrow="ANALYSIS BREAKDOWN" className="reasons-panel">
       {!data ? <p className="muted" role="status">{response?.error?.message ?? "分析結果を取得中…"}</p> : <>
         <p className="analysis-comment">{data.summary}</p>
-        <div className="quality-grid">{Object.entries(data.dataQuality.categories).map(([category, value]) => <span className="badge" key={category}>{categoryLabels[category as keyof typeof categoryLabels]} · {value.status === "ok" ? "OK" : value.status === "partial" ? "Partial" : "Missing"}</span>)}</div>
+        <div className="quality-grid">{Object.entries(data.dataQuality.categories).map(([category, value]) => <span className="badge" key={category}>{categoryLabels[category as keyof typeof categoryLabels]} · {value.status === "ok" ? "OK" : value.status === "partial" ? "Partial" : "Missing"}</span>)}{data.dataQuality.macroeconomicData && <span className="badge">米国マクロ · {data.dataQuality.macroeconomicData.status === "ok" ? "OK" : data.dataQuality.macroeconomicData.status === "partial" ? "Partial" : "Missing"}</span>}</div>
         <div className="ai-factors">{data.factors.map((factor, index) => <article className="reason" key={`${factor.category}-${index}`}><div className="row"><h3>{factor.title}</h3><span className={`badge ${factor.direction === "bullish" ? "positive" : factor.direction === "bearish" ? "negative" : "neutral"}`}>{{ bullish: "↑ 上昇要因", bearish: "↓ 下落要因", neutral: "→ 中立", unknown: "未評価" }[factor.direction]}</span></div><p>{factor.reason}</p><small className="material-source">{factor.source}</small></article>)}</div>
         <div className="ai-reason-columns"><section><h3 className="positive">強気材料</h3><ReasonList items={data.bullishReasons} empty="確認できる強気材料はありません。" /></section><section><h3 className="negative">弱気材料</h3><ReasonList items={data.bearishReasons} empty="確認できる弱気材料はありません。" /></section></div>
       </>}

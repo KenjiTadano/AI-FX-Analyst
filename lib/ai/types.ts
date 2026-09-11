@@ -1,5 +1,5 @@
 import type { Symbol, Timeframe } from "../market/types";
-import type { FundamentalData } from "../fundamental/types";
+import type { EconomicEvent, FundamentalData } from "../fundamental/types";
 
 export const tradeSignals = ["strong_buy", "buy", "wait", "sell", "strong_sell"] as const;
 export type TradeSignal = (typeof tradeSignals)[number];
@@ -45,6 +45,7 @@ export interface DataQuality {
   score: number;
   missingData: string[];
   categories: Record<FactorCategory, { status: Availability; detail: string; fraction: number }>;
+  macroeconomicData: { status: Availability; detail: string; fraction: number };
 }
 export interface Evidence { id: string; categories: FactorCategory[]; title: string; source: string; observedAt: string | null; data: unknown }
 export interface AnalysisInput {
@@ -54,7 +55,7 @@ export interface AnalysisInput {
   fundamentalData: Evidence[];
   dataAvailability: DataQuality;
   timestamp: string;
-  eventRisk: { imminent: boolean; uncertainTime: boolean; nextRiskAt: string | null; reasons: string[] };
+  eventRisk: { imminent: boolean; uncertainTime: boolean; nextRiskAt: string | null; reasons: string[]; events?: EconomicEvent[]; known?: boolean; nextBoundaryAt?: string | null };
 }
 export interface TradeScenario {
   direction: "long" | "short";
@@ -82,6 +83,9 @@ export type AIErrorCode = "not_configured" | "api_error" | "invalid_response" | 
 export interface AIAnalysis {
   pair: Symbol;
   signal: TradeSignal;
+  directionSignal?: TradeSignal;
+  action?: "BUY" | "SELL" | "WAIT";
+  economicRisk?: { active: boolean; known: boolean; reasons: string[]; nextHigh: EconomicEvent | null };
   score: number;
   technicalScore: number;
   confidence: number;

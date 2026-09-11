@@ -1,4 +1,5 @@
-import { classifyImportance, countryCurrencies, keyIndicatorPattern, relatedCurrencies } from "./classification";
+import { indicatorKey } from "../economic-calendar/classification";
+import { classifyImportance, countryCurrencies, relatedCurrencies } from "./classification";
 import type { EconomicEvent, Importance, NewsItem, NormalizedBatch } from "./types";
 
 const record = (value: unknown): Record<string, unknown> | null => value !== null && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
@@ -75,8 +76,8 @@ export function normalizeCalendar(body: unknown, now = Date.now(), assumeUtc = f
       id, name, country, currency, scheduledAt: time.iso, rawScheduledAt: time.raw, timezone: time.timezone,
       previous: number(row.prev), forecast: number(row.estimate), actual, unit: text(row.unit, 30) || null,
       status: eventStatus({ actual, scheduledAt: time.iso }, now), source: "Finnhub", url: null,
-      importance: knownImportance ? providerImportance as Importance : classifyImportance(name),
-      importanceBasis: knownImportance ? "provider" : "keyword", isKeyIndicator: keyIndicatorPattern.test(name),
+      importance: knownImportance ? providerImportance as Importance : indicatorKey(name) ? "high" : classifyImportance(name),
+      importanceBasis: knownImportance ? "provider" : "keyword", isKeyIndicator: !!indicatorKey(name), indicatorKey: indicatorKey(name),
       affectedCurrencies: [currency], impactDirection: null,
       reason: "実績・市場予想・前回値は同じ指標と単位で比較するための材料です。差分だけで通貨の売買方向を断定しません。",
     });

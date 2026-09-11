@@ -1,3 +1,4 @@
+import { calendarTtl } from "../../economic-calendar/risk-window";
 import { ResourceCache, cachePolicy } from "../cache";
 import { normalizeCalendar, normalizeNews } from "../normalize";
 import { ProviderError, unavailable } from "../resource";
@@ -38,7 +39,7 @@ export function createFinnhub(config: FinnhubConfig, fetcher: typeof fetch = fet
     async calendar() {
       if (!config.calendarEnabled) return unavailable<EconomicEvent[]>("Finnhub", "disabled");
       if (!config.apiKey) return unavailable<EconomicEvent[]>("Finnhub", "not_configured");
-      return cache.get("calendar", config.calendarTtlMs ?? cachePolicy.calendarMs, "Finnhub", async () => {
+      return cache.get("calendar", config.calendarTtlMs ?? calendarTtl, "Finnhub", async () => {
         const now = Date.now();
         const date = (offset: number) => new Date(now + offset * 86_400_000).toISOString().slice(0, 10);
         const body = await request("calendar/economic", { from: date(-1), to: date(7) });

@@ -1,3 +1,4 @@
+import { nextHigh, riskState } from "../economic-calendar/risk-window";
 import { categoryLabels } from "./input";
 import { directionValue, scoreDirection } from "./technical";
 import { generateScenario } from "./scenario";
@@ -16,6 +17,8 @@ export function signalFromScore(score: number): TradeSignal {
 }
 export function finalizeAnalysis(input: AnalysisInput, interpretation: ModelInterpretation | null, model: string, error: AIErrorCode | null, now = Date.now()): AIAnalysis {
   const technical = input.technicalAnalysis;
+  const calendarRisk = input.eventRisk.events ? riskState(input.eventRisk.events, now) : input.eventRisk;
+  const economicBlocked = calendarRisk.imminent || calendarRisk.uncertainTime || input.eventRisk.imminent || input.eventRisk.uncertainTime;
   const aiReady = interpretation !== null && error === null;
   const factors = [...technical.factors];
   for (const category of factorCategories.filter(category => category !== "technical")) {
@@ -27,7 +30,7 @@ export function finalizeAnalysis(input: AnalysisInput, interpretation: ModelInte
   const score = Math.round(Math.max(-100, Math.min(100, technical.score * 0.7 + fundamentalScore)));
   const contradictory = !!interpretation?.contradictions || (Math.abs(technical.score) >= 20 && Math.abs(fundamentalScore) >= 6 && Math.sign(technical.score) !== Math.sign(fundamentalScore)) || technical.frames.some(frame => frame.available && Math.abs(frame.score) >= 20 && Math.sign(frame.score) !== Math.sign(technical.score));
   const overextendedRsi = technical.frames.some(frame => ["oversold", "overbought"].includes(frame.rsiState));
-  const confidence = aiReady ? Math.max(0, Math.round(Math.min(interpretation.confidence, input.dataAvailability.score, 90) - (contradictory ? 20 : 0) - (overextendedRsi ? 8 : 0))) : Math.min(35, input.dataAvailability.score);
+  const confidence = aiReady ? Math.max(0, Math.round(Math.min(interpretation.confidence, input.dataAvailability.score, 90) - (contradictory ? 20 : 0) - (overextendedRsi ? 8 : 0) - (economicBlocked ? 15 : 0))) : Math.min(35, input.dataAvailability.score);
   const decisionReasons: string[] = [];
   if (!aiReady) decisionReasons.push(aiMessages[error ?? "api_error"]);
   if (!technical.ready) decisionReasons.push("新鮮なレートと十分な2時間軸以上の確定足が必要です。");
@@ -35,8 +38,8 @@ export function finalizeAnalysis(input: AnalysisInput, interpretation: ModelInte
   if (confidence < 55) decisionReasons.push("確信度が55%未満のため待機します。");
   if (contradictory) decisionReasons.push("テクニカルと他の材料、または時間軸間に矛盾があります。");
   if (technical.extended) decisionReasons.push("急変・大きな乖離があり、追いかけエントリーを見送ります。");
-  if (input.eventRisk.nextRiskAt && now >= Date.parse(input.eventRisk.nextRiskAt)) decisionReasons.push("分析中に重要指標の発表30分前に入ったため待機します。");
-  if (input.eventRisk.imminent || input.eventRisk.uncertainTime) decisionReasons.push(...input.eventRisk.reasons);
+  if (input.eventRisk.nextRiskAt && now >= Date.parse(input.eventRisk.nextRiskAt)) decisionReasons.push("分析中に経済指標のリスク時間帯へ入ったため待機します。");
+  if (economicBlocked) decisionReasons.push(...new Set([...calendarRisk.reasons, ...input.eventRisk.reasons]));
   if (interpretation?.preferWait) decisionReasons.push("AIの材料統合でも、条件が整うまで待つ判断です。");
   let signal = decisionReasons.length ? "wait" as const : signalFromScore(score);
   if (signal === "wait" && !decisionReasons.length) decisionReasons.push("方向スコアが中立帯です。");
@@ -48,9 +51,10 @@ export function finalizeAnalysis(input: AnalysisInput, interpretation: ModelInte
   const technicalBearish = technical.factors.filter(factor => factor.direction === "bearish").map(factor => factor.reason);
   const defaultExpiry = now + (aiReady ? 300_000 : 60_000);
   const riskAt = input.eventRisk.nextRiskAt ? Date.parse(input.eventRisk.nextRiskAt) : Number.POSITIVE_INFINITY;
-  const expiresAt = Math.min(defaultExpiry, riskAt > now ? riskAt : defaultExpiry);
+  const boundary = "nextBoundaryAt" in calendarRisk && calendarRisk.nextBoundaryAt ? Date.parse(calendarRisk.nextBoundaryAt) : Infinity;
+  const expiresAt = Math.min(defaultExpiry, riskAt > now ? riskAt : defaultExpiry, boundary > now ? boundary : defaultExpiry);
   return {
-    pair: input.pair, signal, score, technicalScore: technical.score, confidence,
+    pair: input.pair, signal, directionSignal: signalFromScore(score), action: signal === "wait" ? "WAIT" : signal.includes("buy") ? "BUY" : "SELL", economicRisk: { active: calendarRisk.imminent, known: input.eventRisk.known ?? false, reasons: calendarRisk.reasons, nextHigh: nextHigh(input.eventRisk.events ?? [], now) }, score, technicalScore: technical.score, confidence,
     summary: aiReady ? interpretation.summary : `AI統合は未取得です。取得済みテクニカルの方向は${{ bullish: "上昇寄り", bearish: "下落寄り", neutral: "中立", unknown: "未確認" }[scoreDirection(technical.score)]}ですが、総合判定は「待った」です。`,
     factors, bullishReasons: aiReady ? interpretation.bullishReasons : technicalBullish, bearishReasons: aiReady ? interpretation.bearishReasons : technicalBearish,
     riskWarnings: [...new Set([...technical.warnings, ...input.dataAvailability.missingData, ...input.eventRisk.reasons, ...(interpretation?.riskWarnings ?? []), ...(interpretation?.scenarioComment ? [interpretation.scenarioComment] : []), "確信度とスコアは勝率ではありません。条件が整うまでは待機できます。" ])],

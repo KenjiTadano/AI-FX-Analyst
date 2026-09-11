@@ -40,9 +40,11 @@ export interface EconomicEvent extends ImpactContext {
   scheduledAt: string | null;
   rawScheduledAt: string | null;
   timezone: "UTC" | null;
-  previous: number | null;
-  forecast: number | null;
-  actual: number | null;
+  previous: number | string | null;
+  forecast: number | string | null;
+  actual: number | string | null;
+  updatedAt?: string;
+  indicatorKey?: string | null;
   unit: string | null;
   status: "upcoming" | "released" | "awaiting_actual" | "unknown";
   source: string;
@@ -76,6 +78,31 @@ export interface CurrencyFactors {
   centralBank: string;
   impactDirection: null;
 }
+export type MacroCategory = "inflation" | "labor" | "growth" | "rates";
+export type FredTransformation = "lin" | "pc1" | "chg";
+export interface EconomicIndicatorValue {
+  id: string;
+  name: string;
+  shortName?: string;
+  country: "US";
+  currency: "USD";
+  seriesId: string;
+  seriesTitle: string;
+  value: number | null;
+  previousValue: number | null;
+  unit: string | null;
+  frequency: string | null;
+  observationDate: string | null;
+  previousObservationDate: string | null;
+  category: MacroCategory;
+  seasonalAdjustment: string | null;
+  transformation: FredTransformation;
+  source: "FRED";
+  sourceUrl?: string;
+  updatedAt: string;
+  stale: boolean;
+  ageDays: number | null;
+}
 export interface FundamentalData {
   schemaVersion: 1;
   symbol: Symbol;
@@ -84,6 +111,7 @@ export interface FundamentalData {
   generatedAt: string;
   news: DataResource<NewsItem[]>;
   calendar: DataResource<EconomicEvent[]>;
+  macroeconomic: DataResource<EconomicIndicatorValue[]>;
   centralBanks: DataResource<CentralBank[]>;
   sentiment: DataResource<SentimentData>;
   factors: CurrencyFactors[];
@@ -92,6 +120,7 @@ export interface NormalizedBatch<T> { items: T[]; warnings: string[] }
 export interface FundamentalProviders {
   news(): Promise<DataResource<NewsItem[]>>;
   calendar(): Promise<DataResource<EconomicEvent[]>>;
+  macroeconomic?(): Promise<DataResource<EconomicIndicatorValue[]>>;
   centralBanks(context: { currencies: Currency[]; news: DataResource<NewsItem[]>; calendar: DataResource<EconomicEvent[]> }): Promise<DataResource<CentralBank[]>>;
   sentiment(currencies: Currency[]): Promise<DataResource<SentimentData>>;
 }

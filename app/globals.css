@@ -136,6 +136,7 @@ h2 { font-size: 17px; font-weight: 600; margin-top: 4px; }
 .bank-details dt { color: var(--muted); }
 .bank-details dd { text-align: right; }
 .environment-value { font-size: 26px; color: #b4c2d4; margin: 22px 0 10px; }
+.macro-emphasis { border-color: #2a3d55; }
 @media (max-width: 640px) { .material-grid { grid-template-columns: 1fr; gap: 16px; } .material-category { padding: 16px; } .fundamental-panel { padding: 22px 16px; } }
 
 /* Task005: actual analysis cards use the established dashboard palette. */
@@ -245,3 +246,8 @@ h2 { font-size: 17px; font-weight: 600; margin-top: 4px; }
 .auth-page input:focus-visible, .auth-page button:focus-visible, .auth-status button:focus-visible { outline: 2px solid var(--green); outline-offset: 3px; }
 .auth-confirm-error { padding: 20px; color: var(--amber); text-align: center; }
 .cloud-settings { min-width: 0; }
+
+/* Task009 calendar */
+.calendar-summary { padding: 16px; margin: 16px 0; border: 1px solid var(--border, #293340); border-radius: 12px; background: #111c2a; overflow-wrap: anywhere; }
+.calendar-summary p { margin-top: 8px; font-size: 13px; line-height: 1.7; }
+.event-values dd, .event-time { overflow-wrap: anywhere; }
