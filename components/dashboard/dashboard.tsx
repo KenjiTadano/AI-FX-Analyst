@@ -54,7 +54,7 @@ export function Dashboard({ analyses, account }: { analyses: FxAnalysis[]; accou
   const analysis = analyses.find(item => item.pair === selectedPair) ?? analyses[0];
   if (!analysis) return <main className="dashboard-shell"><p>分析データがありません。</p></main>;
   return <>
-    <header className="app-header"><div className="header-inner"><Link className="brand" href="/" aria-label="AI FX Analyst ホーム"><span className="brand-icon" aria-hidden="true">↗</span><span>AI FX <span className="brand-light">Analyst</span></span></Link><span className="demo-badge"><span />MVP / TASK 014</span></div></header>
+    <header className="app-header"><div className="header-inner"><Link className="brand" href="/" aria-label="AI FX Analyst ホーム"><span className="brand-icon" aria-hidden="true">↗</span><span>AI FX <span className="brand-light">Analyst</span></span></Link><span className="demo-badge"><span />MVP / TASK 015</span></div></header>
     <main className="dashboard-shell" id="main-content">
       <div className="page-heading"><div><p className="eyebrow">YOUR MARKET, AT A GLANCE</p><h1>マーケットの今を、ひと目で。</h1><p className="muted">相場の方向性とリスクを、一つのダッシュボードに。</p></div><span className="workspace-label">FX ANALYSIS / 01</span></div>
       <div className="demo-notice"><span className="notice-icon" aria-hidden="true">i</span><p><strong>レート・テクニカルはTwelve Data</strong><span>AI総合判定は取得済みデータから分析。チャート画像は補助Evidenceです。AI未取得・データ不足時は待機します。無料枠は1日800クレジットのため、常時更新には上限があります。</span></p></div>
@@ -65,7 +65,7 @@ export function Dashboard({ analyses, account }: { analyses: FxAnalysis[]; accou
       <div hidden={view !== "analysis"}><div className="dashboard-grid decision-layout" aria-live="polite" aria-atomic="false"><AIOverview response={aiResponse} pair={selectedPair} pendingChart={pendingChart} chartActive={!!activeChart} onExcludeChart={excludeChart} onRefresh={refreshAnalysis} refreshing={aiRefreshing} currentRate={liveRate} rateDecimals={analysis.decimals} />{auth.user ? <CloudSettings key={userId} userId={userId} analysis={aiResponse?.data ?? null} pair={selectedPair} currentRate={liveRate} onBalanceChange={onBalanceChange} /> : <LoginRequired settings />}<TechnicalPanel data={market?.data ?? null} error={market?.error ?? null} /><FundamentalPanel symbol={selectedPair} result={fundamentals} /><AIExplanation response={aiResponse} /></div></div>
       <div hidden={view !== "chart"}><ChartAnalysisPanel pair={selectedPair} onPairChange={changePair} includedChart={pendingChart} onIncludeChart={includeChart} onExcludeChart={clearCharts} /></div>
       {auth.user ? <TradeJournal key={userId} userId={userId} view={view === "chart" ? "analysis" : view} pair={selectedPair} quote={quote?.data != null && quote.fetchedAt ? { pair: selectedPair, price: quote.data, fetchedAt: quote.fetchedAt, stale: !!quote.stale || !!quote.error } : null} analysis={aiResponse?.data ?? null} chartImageAnalysis={activeChart ?? pendingChart} initialBalance={journalBalance.userId === userId ? journalBalance.value : NaN} /> : view !== "analysis" && view !== "chart" && <LoginRequired />}
-      <footer className="page-footer"><span>AI FX Analyst</span><p>分析は条件付きの参考情報です。WAITも正常な判断です。</p><span>PROTOTYPE / TASK 014</span></footer>
+      <footer className="page-footer"><span>AI FX Analyst</span><p>分析は条件付きの参考情報です。WAITも正常な判断です。</p><span>PROTOTYPE / TASK 015</span></footer>
     </main>
   </>;
 }

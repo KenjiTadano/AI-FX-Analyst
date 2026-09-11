@@ -250,6 +250,15 @@ h2 { font-size: 17px; font-weight: 600; margin-top: 4px; }
 @media (max-width: 900px) { .insight-summary-cards, .insight-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 540px) { .insight-summary-cards, .insight-cards { grid-template-columns: 1fr; } }
 
+/* Task015 Performance period + Entry Timing */
+.period-tabs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.period-tab { min-width: 0; padding: 12px 10px; border: 1px solid #405169; border-radius: 8px; background: #101925; cursor: pointer; font-size: 13px; }
+.period-tab.active, .period-tab[aria-pressed="true"] { background: #205346; border-color: var(--green); color: #fff; }
+.period-tab:focus-visible { outline: 2px solid var(--green); outline-offset: 2px; }
+.entry-timing-direction { margin-top: 14px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.entry-timing-bands { margin-top: 14px; }
+@media (max-width: 540px) { .period-tabs, .entry-timing-direction { grid-template-columns: 1fr; } }
+
 /* Task008 authentication and persisted settings. */
 .auth-status { display: flex; justify-content: flex-end; align-items: center; flex-wrap: wrap; gap: 14px; padding: 0 0 18px; font-size: 12px; overflow-wrap: anywhere; }
 .auth-status a { color: var(--green); }

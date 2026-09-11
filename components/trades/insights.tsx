@@ -18,20 +18,25 @@ function cardClass(label: InsightSummaryCard["label"] | TradingInsight["label"])
   return "insight-neutral";
 }
 
-export function TradingReviewInsights({ trades }: { trades: Trade[] }) {
+export function TradingReviewInsights({ trades, periodLabel = "全期間" }: { trades: Trade[]; periodLabel?: string }) {
   const review = useMemo(() => generateTradingInsights(trades), [trades]);
 
   return (
     <Panel title="トレード振り返り" eyebrow="TRADING REVIEW INSIGHTS" className="journal-wide insights-panel">
-      <p className="footnote">過去の取引結果に基づく参考情報です。次の取引で利益が出ることや、特定の方法で勝てることを示すものではありません。</p>
+      <p className="footnote">対象期間：{periodLabel}。過去の取引結果に基づく参考情報です。次の取引で利益が出ることや、特定の方法で勝てることを示すものではありません。</p>
       <p className="footnote">AI Confidenceは分析判断の確信度であり、勝率を保証する値ではありません。傾向判定の目安は決済済み {MIN_INSIGHT_SAMPLE_SIZE} 件以上です。</p>
 
       {review.empty ? (
         <p className="material-empty" role="status">
-          トレードデータを蓄積すると、AI判断との一致やWAIT中エントリーなどの傾向を確認できます。
+          {periodLabel === "全期間"
+            ? "トレードデータを蓄積すると、AI判断との一致やWAIT中エントリーなどの傾向を確認できます。"
+            : "この期間には取引記録がありません。最近の傾向判定にはまだデータが不足しています。"}
         </p>
       ) : (
         <>
+          {review.closedCount < MIN_INSIGHT_SAMPLE_SIZE && periodLabel !== "全期間" && (
+            <p className="neutral" role="status">最近の傾向判定にはまだデータが不足しています（決済 {review.closedCount} 件）。</p>
+          )}
           {review.summaryCards.length > 0 && (
             <div className="insight-summary-cards" aria-label="振り返りサマリー">
               {review.summaryCards.slice(0, MAX_SUMMARY_CARDS).map(card => (
@@ -49,7 +54,7 @@ export function TradingReviewInsights({ trades }: { trades: Trade[] }) {
           )}
 
           <section className="insight-list" aria-label="振り返りインサイト">
-            <h3 className="insight-list-heading">最近の傾向</h3>
+            <h3 className="insight-list-heading">最近の傾向（{periodLabel}）</h3>
             <div className="insight-cards">
               {review.insights.map(insight => (
                 <article key={insight.id} className={`insight-card ${cardClass(insight.label)}`}>
