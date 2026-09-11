@@ -4,6 +4,7 @@ import { alignmentPerformance, chartEvidencePerformance, confidenceBandPerforman
 import { alignmentLabels } from "@/lib/trades/snapshot";
 import type { Trade } from "@/lib/trades/types";
 import { Panel } from "../dashboard/panels";
+import { TradingReviewInsights } from "./insights";
 import { TradeList } from "./trade-list";
 import { money, signalLabels, tone } from "./format";
 export function Performance({ trades, initialBalance }: { trades: Trade[]; initialBalance: number }) {
@@ -15,6 +16,7 @@ export function Performance({ trades, initialBalance }: { trades: Trade[]; initi
   const latest = curve.at(-1)?.balance ?? null;
   function moveMonth(offset: number) { const d = new Date(`${month}-01T00:00:00Z`); d.setUTCMonth(d.getUTCMonth() + offset); setMonth(d.toISOString().slice(0, 7)); setDay(null); }
   return <div className="performance-grid">
+    <TradingReviewInsights trades={trades} />
     <Panel title="損益サマリー" eyebrow="REALIZED RESULTS" className="journal-wide">
       <div className="journal-stats">{([
         ["総損益", money(stats.totalPnl, true)], ["総取引数（決済済み）", `${stats.count}件`], ["勝ち / 負け / 引分", `${stats.wins} / ${stats.losses} / ${stats.draws}`], ["勝率", stats.winRate === null ? "—" : `${stats.winRate.toFixed(1)}%`], ["平均利益", money(stats.averageProfit)], ["平均損失", money(stats.averageLoss)], ["Profit Factor", stats.profitFactor === null ? stats.noLosses ? "損失なし" : "—" : stats.profitFactor.toFixed(2)], ["最大利益", money(stats.maxProfit)], ["最大損失", money(stats.maxLoss)], ["平均予定RR", stats.averageRiskReward === null ? "未算出" : `1 : ${stats.averageRiskReward.toFixed(2)}`],

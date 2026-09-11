@@ -233,6 +233,23 @@ h2 { font-size: 17px; font-weight: 600; margin-top: 4px; }
 @media (max-width: 800px) { .journal-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 540px) { .journal-fields, .performance-cards { grid-template-columns: 1fr; } .journal-form { padding: 18px; } .journal-shell .panel { padding: 20px 14px; } .pnl-calendar { gap: 3px; } .pnl-calendar button small { font-size: 9px; } .journal-shell .pnl-calendar button { min-height: 70px; } .trade-record { padding: 14px; } .journal-stats strong { font-size: 17px; } }
 
+/* Task014 Trading Review Insights */
+.insight-summary-cards, .insight-cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin-top: 16px; }
+.insight-summary-card, .insight-card { background: #172232; border-radius: 8px; padding: 16px; min-width: 0; border-left: 3px solid #405169; }
+.insight-summary-card.insight-good, .insight-card.insight-good { border-left-color: var(--green); }
+.insight-summary-card.insight-caution, .insight-card.insight-caution { border-left-color: var(--amber); }
+.insight-summary-card.insight-insufficient, .insight-card.insight-insufficient { border-left-color: #6b7c93; }
+.insight-summary-card h3, .insight-card h3 { font-size: 15px; margin: 0; overflow-wrap: anywhere; }
+.insight-summary-card strong { display: block; font-size: 22px; margin: 12px 0; overflow-wrap: anywhere; }
+.insight-summary-card p, .insight-card .insight-metrics { font-size: 12px; color: var(--muted); margin: 0; }
+.insight-list { margin-top: 22px; }
+.insight-list-heading { font-size: 14px; margin: 0 0 4px; }
+.insight-description { font-size: 13px; line-height: 1.7; margin: 12px 0 0; overflow-wrap: anywhere; }
+.insight-suggestion { margin-top: 12px; font-size: 12px; line-height: 1.7; color: var(--muted); overflow-wrap: anywhere; }
+.insight-suggestion .badge { margin-right: 8px; }
+@media (max-width: 900px) { .insight-summary-cards, .insight-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 540px) { .insight-summary-cards, .insight-cards { grid-template-columns: 1fr; } }
+
 /* Task008 authentication and persisted settings. */
 .auth-status { display: flex; justify-content: flex-end; align-items: center; flex-wrap: wrap; gap: 14px; padding: 0 0 18px; font-size: 12px; overflow-wrap: anywhere; }
 .auth-status a { color: var(--green); }
