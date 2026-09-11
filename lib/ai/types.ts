@@ -1,5 +1,6 @@
 import type { Symbol, Timeframe } from "../market/types";
 import type { EconomicEvent, FundamentalData } from "../fundamental/types";
+import type { ChartImageAnalysis } from "../chart-analysis/types";
 
 export const tradeSignals = ["strong_buy", "buy", "wait", "sell", "strong_sell"] as const;
 export type TradeSignal = (typeof tradeSignals)[number];
@@ -56,6 +57,7 @@ export interface AnalysisInput {
   dataAvailability: DataQuality;
   timestamp: string;
   eventRisk: { imminent: boolean; uncertainTime: boolean; nextRiskAt: string | null; reasons: string[]; events?: EconomicEvent[]; known?: boolean; nextBoundaryAt?: string | null };
+  chartImageAnalysis?: ChartImageAnalysis;
 }
 export interface TradeScenario {
   direction: "long" | "short";

@@ -1,5 +1,7 @@
 import { calendarKnown, riskState, windowFor } from "../economic-calendar/risk-window";
 import { surprise } from "../economic-calendar/normalize";
+import { canAttachToPairAnalysis } from "../chart-analysis/normalize";
+import type { ChartImageAnalysis } from "../chart-analysis/types";
 import { FRED_SERIES_COUNT } from "../fundamental/fred-series";
 import type { MarketData, Symbol } from "../market/types";
 import type { DataResource, EconomicIndicatorValue, FundamentalData } from "../fundamental/types";
@@ -23,7 +25,7 @@ export function macroeconomicQuality(resource: DataResource<EconomicIndicatorVal
   };
 }
 
-export function buildInput(pair: Symbol, market: MarketData | null, fundamentals: FundamentalData | null, now = Date.now()): AnalysisInput {
+export function buildInput(pair: Symbol, market: MarketData | null, fundamentals: FundamentalData | null, now = Date.now(), chartImageAnalysis?: ChartImageAnalysis | null): AnalysisInput {
   if (market?.symbol !== pair) market = null;
   if (fundamentals?.symbol !== pair) fundamentals = null;
   const technicalAnalysis = evaluateTechnical(market, now);
@@ -87,6 +89,32 @@ export function buildInput(pair: Symbol, market: MarketData | null, fundamentals
       evidence.push({ id: `sentiment:${item.id}`, categories: ["market_environment"], title: item.id, source: item.observation.source ?? "sentiment provider", observedAt: item.observation.asOf, data: { subject: item.id, value: item.observation.value } });
     }
   }
+  const attachedChart = canAttachToPairAnalysis(chartImageAnalysis, pair) ? chartImageAnalysis : undefined;
+  if (attachedChart) {
+    evidence.push({
+      id: "technical:chart_image",
+      categories: ["technical"],
+      title: "ユーザー提供チャート画像の観察",
+      source: "chart_image",
+      observedAt: attachedChart.analyzedAt,
+      data: {
+        kind: "chart_image_snapshot",
+        detectedPair: attachedChart.detected.pair,
+        timeframe: attachedChart.detected.timeframe,
+        chartType: attachedChart.detected.chartType,
+        currentPrice: attachedChart.detected.currentPrice,
+        trend: attachedChart.trend,
+        structure: attachedChart.structure,
+        levels: attachedChart.levels,
+        patterns: attachedChart.patterns,
+        indicators: attachedChart.indicators,
+        observations: attachedChart.observations.slice(0, 8),
+        warnings: attachedChart.warnings.slice(0, 8),
+        dataQuality: attachedChart.dataQuality,
+        note: "チャート画像はユーザー提供のスナップショットであり、時刻や価格が現在市場と一致しない可能性がある。市場APIの価格・OHLCを上書きしない。",
+      },
+    });
+  }
   const macroQuality = macroeconomicQuality(macroeconomic);
   const fractions: Record<FactorCategory, number> = {
     technical: (rate !== null ? 0.2 : 0) + technicalAnalysis.frames.reduce((sum, frame) => sum + frame.completeness * 0.8 / 3, 0),
@@ -111,5 +139,5 @@ export function buildInput(pair: Symbol, market: MarketData | null, fundamentals
     macroeconomicData: macroQuality,
   };
   const eventRisk: AnalysisInput["eventRisk"] = { ...riskState(events, now), events, known: calendarFresh };
-  return { pair, currentRate: rate, technicalAnalysis, fundamentalData: evidence, dataAvailability, timestamp: new Date(now).toISOString(), eventRisk };
+  return { pair, currentRate: rate, technicalAnalysis, fundamentalData: evidence, dataAvailability, timestamp: new Date(now).toISOString(), eventRisk, ...(attachedChart ? { chartImageAnalysis: attachedChart } : {}) };
 }

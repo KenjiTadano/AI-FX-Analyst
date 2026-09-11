@@ -251,3 +251,18 @@ h2 { font-size: 17px; font-weight: 600; margin-top: 4px; }
 .calendar-summary { padding: 16px; margin: 16px 0; border: 1px solid var(--border, #293340); border-radius: 12px; background: #111c2a; overflow-wrap: anywhere; }
 .calendar-summary p { margin-top: 8px; font-size: 13px; line-height: 1.7; }
 .event-values dd, .event-time { overflow-wrap: anywhere; }
+
+/* Task010 chart image analysis */
+.chart-analysis-layout { display: grid; gap: 20px; }
+.chart-controls { display: grid; gap: 10px; margin: 12px 0 18px; }
+.chart-controls label { font-size: 12px; color: var(--muted); }
+.chart-controls input[type="file"] { width: 100%; min-width: 0; }
+.chart-preview-card { border-top: 1px solid var(--border); padding-top: 16px; }
+.chart-preview-image { display: block; width: 100%; max-width: 100%; height: auto; border-radius: 8px; border: 1px solid var(--border); background: #0a1220; }
+.chart-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+.chart-actions button { border: 1px solid #405169; border-radius: 7px; padding: 10px 16px; background: #172232; cursor: pointer; font-size: 13px; min-height: 42px; }
+.chart-actions button:disabled { opacity: .55; cursor: default; }
+.chart-result-heading { margin: 18px 0 8px; font-size: 13px; font-weight: 600; }
+.chart-level-list { list-style: none; padding: 0; margin: 0; }
+.chart-level-list li { padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 13px; line-height: 1.7; overflow-wrap: anywhere; }
+@media (max-width: 640px) { .chart-actions { flex-direction: column; } .chart-actions button { width: 100%; } }
