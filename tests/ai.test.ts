@@ -7,7 +7,7 @@ import { buildInput } from "../lib/ai/input";
 import { evaluateTechnical, scoreDirection } from "../lib/ai/technical";
 import { finalizeAnalysis, signalFromScore } from "../lib/ai/engine";
 import { generateScenario, validateScenario } from "../lib/ai/scenario";
-import { AnalysisError, createOpenAI, systemPrompt, validateInterpretation } from "../lib/ai/openai";
+import { AnalysisError, createOpenAI, interpretationFailureReason, interpretationSchema, systemPrompt, validateInterpretation } from "../lib/ai/openai";
 import { createAnalysisService } from "../lib/ai/service";
 import { factorCategories, type AnalysisInput, type ModelInterpretation, type TradeScenario, type Direction } from "../lib/ai/types";
 
@@ -173,6 +173,50 @@ test("model JSON must have exactly five categories and grounded evidence", () =>
   assert.throws(() => validateInterpretation(wrong, snapshot));
   const missing = buildInput("USD/JPY", market(), null, now);
   assert.throws(() => validateInterpretation(valid, missing));
+});
+test("duplicate technical factors and empty source fail with actionable reasons", () => {
+  const snapshot = input();
+  const valid = interpretation(snapshot);
+  const duplicated = {
+    ...valid,
+    factors: [
+      { ...valid.factors[0], evidenceIds: valid.factors[0].evidenceIds },
+      { ...valid.factors[0], title: "chart split", direction: "bearish" as const, evidenceIds: valid.factors[0].evidenceIds },
+      ...valid.factors.slice(1),
+    ],
+  };
+  assert.equal(interpretationFailureReason(duplicated, snapshot), "invalid_factors_count:6");
+  const duplicatedWithinFive = {
+    ...valid,
+    factors: [
+      valid.factors[0],
+      { ...valid.factors[0], title: "second technical", direction: "bearish" as const },
+      valid.factors[2],
+      valid.factors[3],
+      valid.factors[4],
+    ],
+  };
+  assert.equal(interpretationFailureReason(duplicatedWithinFive, snapshot), "factor_1_duplicate_category:technical");
+  const emptySource = structuredClone(valid);
+  emptySource.factors[1].source = "";
+  assert.equal(interpretationFailureReason(emptySource, snapshot), "factor_1_bad_source");
+  assert.match(JSON.stringify(interpretationSchema.properties.factors), /"minItems":5/);
+  assert.match(JSON.stringify(interpretationSchema.properties.factors), /"maxItems":5/);
+  assert.match(JSON.stringify(interpretationSchema.properties.factors.items.properties.source), /"minLength":1/);
+});
+test("FRED macro evidence can ground economic factor even when calendar DQ is missing", () => {
+  const snapshot = buildInput("USD/JPY", market(), fundamentals(), now);
+  snapshot.dataAvailability.categories.economic = { status: "missing", fraction: 0, detail: "経済指標: 未取得・期限切れ" };
+  assert.ok(snapshot.fundamentalData.some(item => item.id.startsWith("macro:")));
+  const valid = interpretation(snapshot, "neutral");
+  const economic = valid.factors.find(factor => factor.category === "economic")!;
+  economic.direction = "neutral";
+  economic.evidenceIds = snapshot.fundamentalData.filter(item => item.id.startsWith("macro:")).map(item => item.id).slice(0, 3);
+  economic.source = "FRED";
+  assert.equal(interpretationFailureReason(valid, snapshot), null);
+  assert.deepEqual(validateInterpretation(valid, snapshot), valid);
+  economic.evidenceIds = [];
+  assert.equal(interpretationFailureReason(valid, snapshot), "factor_2_directional_without_evidence:economic");
 });
 test("Responses request uses server header, strict schema, no storage, and no secrets in input", async () => {
   const snapshot = input();

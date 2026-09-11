@@ -103,6 +103,8 @@ export interface AIAnalysis {
   expiresAt: string;
   decisionReasons: string[];
   ai: { status: "available" | "unavailable" | "error"; model: string | null; code: AIErrorCode | null; message: string | null };
+  /** Present only when a validated ChartImageAnalysis was attached for this run. */
+  chartEvidence?: { used: true; timeframe: string | null; trend: ChartImageAnalysis["trend"]["direction"]; qualityScore: number } | null;
 }
 export type AnalysisResponse = { success: boolean; data: AIAnalysis | null; error: { code: string; message: string } | null; cached: boolean };
 export type FundamentalSnapshot = FundamentalData | null;

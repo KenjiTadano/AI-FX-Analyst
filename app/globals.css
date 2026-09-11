@@ -266,3 +266,9 @@ h2 { font-size: 17px; font-weight: 600; margin-top: 4px; }
 .chart-level-list { list-style: none; padding: 0; margin: 0; }
 .chart-level-list li { padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 13px; line-height: 1.7; overflow-wrap: anywhere; }
 @media (max-width: 640px) { .chart-actions { flex-direction: column; } .chart-actions button { width: 100%; } }
+
+/* Task011 chart → AI integration */
+.chart-attach-box { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--border); }
+.chart-ai-banner { margin-bottom: 16px; padding: 12px 14px; border: 1px solid #405169; border-radius: 8px; background: #132033; }
+.chart-ai-banner p { margin: 0 0 10px; font-size: 13px; line-height: 1.6; }
+.used-data-grid { margin-top: 10px; }

@@ -60,5 +60,11 @@ export function finalizeAnalysis(input: AnalysisInput, interpretation: ModelInte
     riskWarnings: [...new Set([...technical.warnings, ...input.dataAvailability.missingData, ...input.eventRisk.reasons, ...(interpretation?.riskWarnings ?? []), ...(interpretation?.scenarioComment ? [interpretation.scenarioComment] : []), "確信度とスコアは勝率ではありません。条件が整うまでは待機できます。" ])],
     scenario, dataQuality: input.dataAvailability, currentRate: input.currentRate, analyzedAt: new Date(now).toISOString(), expiresAt: new Date(expiresAt).toISOString(), decisionReasons,
     ai: { status: aiReady ? "available" : error === "not_configured" || error === "insufficient_data" ? "unavailable" : "error", model: aiReady ? model : null, code: error, message: error ? aiMessages[error] : null },
+    chartEvidence: input.chartImageAnalysis ? {
+      used: true,
+      timeframe: input.chartImageAnalysis.detected.timeframe,
+      trend: input.chartImageAnalysis.trend.direction,
+      qualityScore: input.chartImageAnalysis.dataQuality.score,
+    } : null,
   };
 }

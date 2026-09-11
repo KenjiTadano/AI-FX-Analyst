@@ -2,7 +2,8 @@
 
 import { useEffect, useId, useRef, useState } from "react";
 import type { ChartAnalysisResponse, ChartImageAnalysis } from "@/lib/chart-analysis/types";
-import { qualityLabel } from "@/lib/chart-analysis/normalize";
+import { canAttachToPairAnalysis, qualityLabel } from "@/lib/chart-analysis/normalize";
+import { chartAttachBlockMessages, chartAttachBlockReason } from "@/lib/chart-analysis/sanitize";
 import { Panel } from "./panels";
 
 const pairs = ["USD/JPY", "EUR/JPY", "GBP/JPY"] as const;
@@ -56,7 +57,19 @@ function StructureList({ structure }: { structure: ChartImageAnalysis["structure
   return <ul className="chart-level-list">{known.map(([label, value]) => <li key={label}>{label}: {value ? "あり" : "なし"}</li>)}</ul>;
 }
 
-export function ChartAnalysisPanel({ pair, onPairChange }: { pair: string; onPairChange: (pair: string) => void }) {
+export function ChartAnalysisPanel({
+  pair,
+  onPairChange,
+  includedChart,
+  onIncludeChart,
+  onExcludeChart,
+}: {
+  pair: string;
+  onPairChange: (pair: string) => void;
+  includedChart: ChartImageAnalysis | null;
+  onIncludeChart: (analysis: ChartImageAnalysis) => void;
+  onExcludeChart: () => void;
+}) {
   const inputId = useId();
   const [image, setImage] = useState<PreparedImage | null>(null);
   const [sourceName, setSourceName] = useState<string | null>(null);
@@ -72,10 +85,15 @@ export function ChartAnalysisPanel({ pair, onPairChange }: { pair: string; onPai
     if (image?.previewUrl) URL.revokeObjectURL(image.previewUrl);
   }, [image?.previewUrl]);
 
+  function resetAnalysisState() {
+    setAnalysis(null);
+    onExcludeChart();
+  }
+
   async function onFileChange(fileList: FileList | null) {
     const file = fileList?.[0];
     setError(null);
-    setAnalysis(null);
+    resetAnalysisState();
     if (image?.previewUrl) URL.revokeObjectURL(image.previewUrl);
     setImage(null);
     setSourceName(null);
@@ -107,7 +125,7 @@ export function ChartAnalysisPanel({ pair, onPairChange }: { pair: string; onPai
     setImage(null);
     setSourceName(null);
     setSourceSize(null);
-    setAnalysis(null);
+    resetAnalysisState();
     setError(null);
     setLoading(false);
   }
@@ -116,6 +134,8 @@ export function ChartAnalysisPanel({ pair, onPairChange }: { pair: string; onPai
     if (!image || loading) return;
     const cacheKey = `${pair}:${image.fingerprint}`;
     const cached = cacheRef.current.get(cacheKey);
+    // New parse attempt clears any previously included snapshot.
+    onExcludeChart();
     if (cached) { setAnalysis(cached); setError(null); return; }
     setLoading(true);
     setError(null);
@@ -144,12 +164,18 @@ export function ChartAnalysisPanel({ pair, onPairChange }: { pair: string; onPai
     }
   }
 
+  const blockReason = analysis ? chartAttachBlockReason(analysis, pair as typeof pairs[number]) : "unavailable";
+  const canInclude = !!analysis && canAttachToPairAnalysis(analysis, pair as typeof pairs[number]);
+  const isIncluded = !!analysis && !!includedChart
+    && includedChart.analyzedAt === analysis.analyzedAt
+    && includedChart.pair === analysis.pair;
+
   return <div className="chart-analysis-layout">
     <Panel title="チャート読取" eyebrow="CHART IMAGE / VISION ASSIST">
       <p className="material-intro">チャート画像は補助的なTechnical Evidenceです。画像だけでは売買判断を確定しません。画像は解析に使用し、このアプリでは保存しません。</p>
       <div className="chart-controls">
         <label htmlFor={`${inputId}-pair`}>通貨ペア</label>
-        <select id={`${inputId}-pair`} value={pair} onChange={event => { onPairChange(event.target.value); setAnalysis(null); }}>
+        <select id={`${inputId}-pair`} value={pair} onChange={event => { onPairChange(event.target.value); resetAnalysisState(); }}>
           {pairs.map(item => <option key={item} value={item}>{item}</option>)}
         </select>
         <label htmlFor={`${inputId}-file`}>チャート画像</label>
@@ -196,6 +222,28 @@ export function ChartAnalysisPanel({ pair, onPairChange }: { pair: string; onPai
       <h3 className="chart-result-heading">10. Data Quality</h3>
       <p>画像品質: {qualityLabel(analysis.dataQuality.score)}（{analysis.dataQuality.score}）</p>
       <p className="footnote">readable={String(analysis.dataQuality.imageReadable)} · pairDetected={String(analysis.dataQuality.pairDetected)} · timeframeDetected={String(analysis.dataQuality.timeframeDetected)}</p>
+      <div className="chart-attach-box">
+        <h3 className="chart-result-heading">AI総合分析への統合</h3>
+        <p className="footnote">結果を確認したうえで、明示操作した場合のみ総合分析へ含めます。勝手には送りません。</p>
+        {isIncluded ? (
+          <div className="chart-actions">
+            <p className="neutral" role="status">このチャートはAI総合分析の対象に含まれています。分析タブで「AI総合分析を更新」を押してください。</p>
+            <button type="button" onClick={onExcludeChart}>チャートを総合分析から外す</button>
+          </div>
+        ) : (
+          <div className="chart-actions">
+            <button
+              type="button"
+              className="journal-primary"
+              disabled={!canInclude}
+              onClick={() => onIncludeChart(analysis)}
+            >
+              このチャートをAI総合分析に含める
+            </button>
+          </div>
+        )}
+        {!canInclude && blockReason && <p className="material-empty neutral" role="status">{chartAttachBlockMessages[blockReason]}</p>}
+      </div>
       <p className="footnote">画像だけではBUY/SELL/WAITを最終決定しません。市場データ・ニュース・指標と合わせて判断してください。</p>
     </Panel>}
   </div>;

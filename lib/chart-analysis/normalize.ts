@@ -176,7 +176,7 @@ export function normalizeChartAnalysis(raw: unknown, selectedPair: Symbol, model
 }
 
 export function canAttachToPairAnalysis(analysis: ChartImageAnalysis | null | undefined, pair: Symbol): analysis is ChartImageAnalysis {
-  if (!analysis || analysis.pair !== pair || analysis.pairMismatch) return false;
+  if (!analysis || analysis.pair !== pair || analysis.pairMismatch || analysis.source !== "chart_image") return false;
   if (!analysis.dataQuality.imageReadable || analysis.dataQuality.score < 40) return false;
   const canonical = normalizeDetectedPair(analysis.detected.pair);
   // Attach when the label confirms the selected pair, or when no pair label was detected.
