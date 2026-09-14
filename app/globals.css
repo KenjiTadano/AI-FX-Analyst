@@ -257,6 +257,7 @@ h2 { font-size: 17px; font-weight: 600; margin-top: 4px; }
 .period-tab:focus-visible { outline: 2px solid var(--green); outline-offset: 2px; }
 .entry-timing-direction { margin-top: 14px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .entry-timing-bands { margin-top: 14px; }
+.ai-entry-context-cards { margin-top: 14px; }
 @media (max-width: 540px) { .period-tabs, .entry-timing-direction { grid-template-columns: 1fr; } }
 
 /* Task008 authentication and persisted settings. */

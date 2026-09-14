@@ -6,6 +6,7 @@ import { PERFORMANCE_PERIODS, filterTradesByPeriod, periodLabel, periodTradeCoun
 import { alignmentLabels } from "@/lib/trades/snapshot";
 import type { Trade } from "@/lib/trades/types";
 import { Panel } from "../dashboard/panels";
+import { AiEntryContextPanel } from "./ai-entry-context";
 import { EntryTimingPanel } from "./entry-timing";
 import { TradingReviewInsights } from "./insights";
 import { TradeList } from "./trade-list";
@@ -79,6 +80,7 @@ export function Performance({ trades, initialBalance }: { trades: Trade[]; initi
       <>
         <TradingReviewInsights trades={filteredTrades} periodLabel={label} />
         <EntryTimingPanel trades={filteredTrades} periodLabel={label} />
+        <AiEntryContextPanel trades={filteredTrades} periodLabel={label} />
         <Panel title="損益サマリー" eyebrow="REALIZED RESULTS" className="journal-wide">
           <p className="footnote">集計対象：{label}</p>
           <div className="journal-stats">{([

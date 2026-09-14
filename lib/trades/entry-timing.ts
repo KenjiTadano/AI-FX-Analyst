@@ -4,9 +4,11 @@ import {
   MIN_INSIGHT_SAMPLE_SIZE,
   analysisReferencePrice,
   priceDeltaToPips,
-  type InsightKind,
-  type InsightLabel,
-  type InsightSeverity,
+} from "./analysis-price";
+import type {
+  InsightKind,
+  InsightLabel,
+  InsightSeverity,
 } from "./insights";
 import type { Trade } from "./types";
 

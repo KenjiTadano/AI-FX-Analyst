@@ -1,14 +1,22 @@
 import { chartEvidencePerformance, confidenceBandPerformance, pairPerformance, summarize } from "./analytics";
-import { computeAiAlignment, isRichSnapshot } from "./snapshot";
-import { pairs, type AiAlignment, type Trade, type TradePair } from "./types";
+import { aiEntryContextInsights } from "./ai-entry-context";
+import {
+  MIN_INSIGHT_SAMPLE_SIZE,
+  entryPriceDeltaPips,
+} from "./analysis-price";
+import { computeAiAlignment } from "./snapshot";
+import { type AiAlignment, type Trade } from "./types";
 
-/** Closed trades needed before a group yields a directional insight (not a ranking claim). */
-export const MIN_INSIGHT_SAMPLE_SIZE = 5;
+export {
+  JPY_PIP_SIZE,
+  MIN_INSIGHT_SAMPLE_SIZE,
+  analysisReferencePrice,
+  entryPriceDeltaPips,
+  priceDeltaToPips,
+} from "./analysis-price";
+
 export const MAX_INSIGHTS = 7;
 export const MAX_SUMMARY_CARDS = 3;
-
-/** JPY-quoted pairs in this app: 1 pip = 0.01. */
-export const JPY_PIP_SIZE = 0.01;
 
 export type InsightKind = "positive" | "warning" | "neutral" | "insufficient_data";
 export type InsightSeverity = "info" | "good" | "caution";
@@ -114,27 +122,6 @@ function fmtRate(n: number | null): string {
 function assertSafe(text: string): string {
   if (FORBIDDEN.test(text)) throw new Error(`insight wording rejected: ${text}`);
   return text;
-}
-
-/** Convert absolute price delta to pips for supported JPY pairs. */
-export function priceDeltaToPips(pair: string, absPriceDelta: number): number | null {
-  if (!pairs.includes(pair as TradePair) || !Number.isFinite(absPriceDelta) || absPriceDelta < 0) return null;
-  return Math.round((absPriceDelta / JPY_PIP_SIZE) * 100) / 100;
-}
-
-/** Analysis reference price from snapshot (rich only). Pair mismatch / missing → null. */
-export function analysisReferencePrice(trade: Trade): number | null {
-  const snap = trade.analysisSnapshot;
-  if (!snap || snap.pair !== trade.pair) return null;
-  if (!isRichSnapshot(snap)) return null;
-  const price = snap.analysisPrice ?? snap.marketPrice;
-  return price !== null && Number.isFinite(price) ? price : null;
-}
-
-export function entryPriceDeltaPips(trade: Trade): number | null {
-  const ref = analysisReferencePrice(trade);
-  if (ref === null) return null;
-  return priceDeltaToPips(trade.pair, Math.abs(trade.entryPrice - ref));
 }
 
 export function dataQualityBandPerformance(trades: Trade[]) {
@@ -299,6 +286,10 @@ export function generateTradingInsights(trades: Trade[]): TradingInsightsResult 
       metrics: metricsFromStats(aligned),
       suggestion: null,
     }));
+  }
+
+  for (const item of aiEntryContextInsights(closed)) {
+    push(item);
   }
 
   const dqBands = dataQualityBandPerformance(closed).filter(b => b.count >= MIN_INSIGHT_SAMPLE_SIZE);
