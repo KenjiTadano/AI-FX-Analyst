@@ -4,7 +4,12 @@ import type { AIAnalysis } from "@/lib/ai/types";
 import type { ChartImageAnalysis } from "@/lib/chart-analysis/types";
 import { actionGuidanceLabel, directionBiasLabel, signalLabels as decisionSignalLabels } from "@/lib/ai/decision-ui";
 import { pairs, type Trade, type TradeDraft } from "@/lib/trades/types";
+import { capturePreTradeContext } from "@/lib/trades/pre-trade-context";
 import { isRichSnapshot } from "@/lib/trades/snapshot";
+import { buildEntryTriggerWatch } from "@/lib/trading-plan/entry-trigger-watch";
+import type { DailyTradingPlan } from "@/lib/trading-plan/daily-plan";
+import type { EntryReadiness } from "@/lib/trading-plan/entry-readiness";
+import { PreTradeContextPreview } from "./pre-trade-context";
 import { dateTime, fromLocalDateTime, localDateTime, signalLabels } from "./format";
 
 interface Props {
@@ -14,11 +19,12 @@ interface Props {
   rate: number | null;
   analysis: AIAnalysis | null;
   chartImageAnalysis?: ChartImageAnalysis | null;
+  getPreTradeSource?: () => { plan: DailyTradingPlan; readiness: EntryReadiness } | null;
   onSave: (draft: TradeDraft, options?: { saveSnapshot?: boolean }) => Promise<string | null>;
   onCancel: () => void;
 }
 
-export function TradeForm({ trade, mode, pair, rate, analysis, chartImageAnalysis = null, onSave, onCancel }: Props) {
+export function TradeForm({ trade, mode, pair, rate, analysis, chartImageAnalysis = null, getPreTradeSource, onSave, onCancel }: Props) {
   const [fields, setFields] = useState(() => ({
     pair: trade?.pair ?? pair,
     side: trade?.side ?? (analysis?.signal.includes("sell") ? "short" : "long"),
@@ -74,6 +80,27 @@ export function TradeForm({ trade, mode, pair, rate, analysis, chartImageAnalysi
     : chartImageAnalysis && chartImageAnalysis.pair === fields.pair
       ? `${chartImageAnalysis.detected.timeframe ?? "時間足未検出"} / ${chartImageAnalysis.trend.direction} / 未添付`
       : "なし";
+  const source = mode === "new" && saveSnapshot ? getPreTradeSource?.() ?? null : null;
+  const preview = mode === "new" && saveSnapshot && live
+    ? capturePreTradeContext({
+      pair: fields.pair,
+      capturedAt: live.analyzedAt,
+      analysis: live,
+      dailyPlan: source?.plan ?? null,
+      readiness: source?.readiness ?? null,
+      distanceToTriggerPips: source?.readiness
+        ? buildEntryTriggerWatch({
+          trigger: source.readiness.entryTrigger,
+          evaluation: source.readiness.triggerEvaluation,
+          action: source.readiness.action,
+          direction: source.readiness.direction,
+          stale: source.readiness.stale,
+          dailyLossLimitReached: source.readiness.dailyLossLimitReached,
+          pair: fields.pair,
+        })?.distanceToTriggerPips ?? null
+        : null,
+    })
+    : null;
 
   return <form className="journal-form" onSubmit={submit} aria-label={mode === "new" ? "新規トレード登録" : mode === "close" ? "決済記録" : "取引編集"}>
     <h3>{mode === "new" ? "実際の取引を記録" : mode === "close" ? "決済を記録" : "取引を編集"}</h3>
@@ -95,6 +122,7 @@ export function TradeForm({ trade, mode, pair, rate, analysis, chartImageAnalysi
           <p>確信度：{live.confidence}% · 分析時刻：{dateTime(live.analyzedAt)}</p>
           <p>Chart：{chartPreview}</p>
           {live.ai.status !== "available" && <p className="neutral">AI一部利用不可時の暫定分析です。</p>}
+          <PreTradeContextPreview context={preview} />
         </div>}
       </> : <p className="footnote">AI分析なし。スナップショットなしで記録できます。</p>}
       {waitWarn && <p className="neutral" role="status">AI分析では現在WAITです。登録は禁止しません。</p>}

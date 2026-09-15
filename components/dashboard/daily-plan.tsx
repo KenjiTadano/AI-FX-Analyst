@@ -14,8 +14,9 @@ import {
   buildDailyTradingPlan,
   parseDailyLossLimitPercent,
   type DailyPlanStatus,
+  type DailyTradingPlan,
 } from "@/lib/trading-plan/daily-plan";
-import { buildEntryReadiness } from "@/lib/trading-plan/entry-readiness";
+import { buildEntryReadiness, type EntryReadiness } from "@/lib/trading-plan/entry-readiness";
 import { EntryReadinessPanel } from "./entry-readiness";
 import { Panel } from "./panels";
 
@@ -75,6 +76,7 @@ export function DailyTradingPlanPanel({
   userId = "",
   onRefresh,
   refreshing = false,
+  onPlanContext,
 }: {
   pair: string;
   analysis: AIAnalysis | null;
@@ -87,6 +89,7 @@ export function DailyTradingPlanPanel({
   userId?: string;
   onRefresh?: () => void;
   refreshing?: boolean;
+  onPlanContext?: (context: { plan: DailyTradingPlan; readiness: EntryReadiness }) => void;
 }) {
   const [now, setNow] = useState(0);
   const [limitDraft, setLimitDraft] = useState<string | null>(null);
@@ -126,6 +129,9 @@ export function DailyTradingPlanPanel({
     candlesByTimeframe,
     now,
   }), [pair, analysis, plan, riskSettings, currentRate, candlesByTimeframe, now]);
+  useEffect(() => {
+    onPlanContext?.({ plan, readiness });
+  }, [plan, readiness, onPlanContext]);
 
   function changeLimit(value: string) {
     setLimitDraft(value);

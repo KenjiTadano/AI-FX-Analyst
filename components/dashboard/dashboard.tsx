@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import Link from "next/link";
 import { TechnicalPanel, useMarket } from "./market";
 import { NextEventBanner } from "./economic-calendar";
@@ -17,6 +17,8 @@ import { useAuth } from "../auth/provider";
 import { AuthStatus, LoginRequired } from "../auth/status";
 import { AIOverview, AIExplanation, useAIAnalysis } from "./ai-analysis";
 import { DailyTradingPlanPanel } from "./daily-plan";
+import type { DailyTradingPlan } from "@/lib/trading-plan/daily-plan";
+import type { EntryReadiness } from "@/lib/trading-plan/entry-readiness";
 
 export function Dashboard({ analyses, account }: { analyses: FxAnalysis[]; account: Account }) {
   const auth = useAuth();
@@ -64,6 +66,11 @@ export function Dashboard({ analyses, account }: { analyses: FxAnalysis[]; accou
     if (pendingChart) setActiveChart(pendingChart);
     refreshNow();
   }, [pendingChart, refreshNow]);
+  const preTradeRef = useRef<{ plan: DailyTradingPlan; readiness: EntryReadiness } | null>(null);
+  const onPlanContext = useCallback((context: { plan: DailyTradingPlan; readiness: EntryReadiness }) => {
+    preTradeRef.current = context;
+  }, []);
+  const getPreTradeSource = useCallback(() => preTradeRef.current, []);
   const quote = market?.data?.price;
   const liveRate = quote?.stale || quote?.error ? null : quote?.data ?? null;
   const analysis = analyses.find(item => item.pair === selectedPair) ?? analyses[0];
@@ -77,9 +84,9 @@ export function Dashboard({ analyses, account }: { analyses: FxAnalysis[]; accou
       <section className="market-panel" aria-label="通貨ペアと現在レート"><div className="pair-control"><label htmlFor="currency-pair">通貨ペア</label><select id="currency-pair" value={analysis.pair} onChange={event => changePair(event.target.value)}>{analyses.map(item => <option key={item.pair} value={item.pair}>{item.pair}</option>)}</select><p>{analysis.name}</p></div><div className="rate-block"><span className="muted">現在レート <span className="mini-label">{quote?.stale ? "STALE" : "TWELVE DATA"}</span></span><div className="rate-value">{quote?.data != null ? quote.data.toFixed(analysis.decimals) : "—"}<small>{analysis.quoteCurrency}</small></div><p className="footnote" role="status">{market?.error || quote?.error || (market ? "60秒キャッシュ · 前日比は未取得" : "取得中…")}</p>{quote?.stale && <p className="negative footnote">更新失敗・最終取得値を表示</p>}<p className="footnote">取得: {quote?.fetchedAt ? new Date(quote.fetchedAt).toLocaleString("ja-JP") : "—"}</p></div><div className="snapshot"><span className="eyebrow">MARKET DATA</span><p>表示中の通貨を自動更新</p><span className="muted">レート60秒 / OHLC 5分キャッシュ</span></div></section>
       <NextEventBanner resource={fundamentals?.data?.calendar} />
       <nav className="journal-nav" aria-label="ダッシュボード表示">{([["analysis", "分析"], ["chart", "チャート読取"], ["trades", "トレード"], ["performance", "成績"]] as const).map(([key, label]) => <button key={key} aria-current={view === key ? "page" : undefined} onClick={() => setView(key)}>{label}</button>)}</nav>
-      <div hidden={view !== "analysis"}><div className="dashboard-grid decision-layout" aria-live="polite" aria-atomic="false"><DailyTradingPlanPanel key={userId || "anon"} pair={selectedPair} analysis={aiResponse?.data && aiResponse.data.pair === selectedPair ? aiResponse.data : null} trades={trades} riskSettings={riskSettings} currentRate={liveRate} calendar={fundamentals?.data?.calendar} market={market?.data && market.data.symbol === selectedPair ? market.data : null} rateDecimals={analysis.decimals} userId={userId} onRefresh={refreshAnalysis} refreshing={aiRefreshing} /><AIOverview response={aiResponse} pair={selectedPair} pendingChart={pendingChart} chartActive={!!activeChart} onExcludeChart={excludeChart} onRefresh={refreshAnalysis} refreshing={aiRefreshing} currentRate={liveRate} rateDecimals={analysis.decimals} />{auth.user ? <CloudSettings key={userId} userId={userId} analysis={aiResponse?.data ?? null} pair={selectedPair} currentRate={liveRate} onBalanceChange={onBalanceChange} onSettingsChange={onSettingsChange} /> : <LoginRequired settings />}<TechnicalPanel data={market?.data ?? null} error={market?.error ?? null} /><FundamentalPanel symbol={selectedPair} result={fundamentals} /><AIExplanation response={aiResponse} /></div></div>
+      <div hidden={view !== "analysis"}><div className="dashboard-grid decision-layout" aria-live="polite" aria-atomic="false"><DailyTradingPlanPanel key={userId || "anon"} pair={selectedPair} analysis={aiResponse?.data && aiResponse.data.pair === selectedPair ? aiResponse.data : null} trades={trades} riskSettings={riskSettings} currentRate={liveRate} calendar={fundamentals?.data?.calendar} market={market?.data && market.data.symbol === selectedPair ? market.data : null} rateDecimals={analysis.decimals} userId={userId} onRefresh={refreshAnalysis} refreshing={aiRefreshing} onPlanContext={onPlanContext} /><AIOverview response={aiResponse} pair={selectedPair} pendingChart={pendingChart} chartActive={!!activeChart} onExcludeChart={excludeChart} onRefresh={refreshAnalysis} refreshing={aiRefreshing} currentRate={liveRate} rateDecimals={analysis.decimals} />{auth.user ? <CloudSettings key={userId} userId={userId} analysis={aiResponse?.data ?? null} pair={selectedPair} currentRate={liveRate} onBalanceChange={onBalanceChange} onSettingsChange={onSettingsChange} /> : <LoginRequired settings />}<TechnicalPanel data={market?.data ?? null} error={market?.error ?? null} /><FundamentalPanel symbol={selectedPair} result={fundamentals} /><AIExplanation response={aiResponse} /></div></div>
       <div hidden={view !== "chart"}><ChartAnalysisPanel pair={selectedPair} onPairChange={changePair} includedChart={pendingChart} onIncludeChart={includeChart} onExcludeChart={clearCharts} /></div>
-      {auth.user ? <TradeJournal key={userId} userId={userId} view={view === "chart" ? "analysis" : view} pair={selectedPair} quote={quote?.data != null && quote.fetchedAt ? { pair: selectedPair, price: quote.data, fetchedAt: quote.fetchedAt, stale: !!quote.stale || !!quote.error } : null} analysis={aiResponse?.data ?? null} chartImageAnalysis={activeChart ?? pendingChart} initialBalance={journalBalance.userId === userId ? journalBalance.value : NaN} onTradesChange={setTrades} /> : view !== "analysis" && view !== "chart" && <LoginRequired />}
+      {auth.user ? <TradeJournal key={userId} userId={userId} view={view === "chart" ? "analysis" : view} pair={selectedPair} quote={quote?.data != null && quote.fetchedAt ? { pair: selectedPair, price: quote.data, fetchedAt: quote.fetchedAt, stale: !!quote.stale || !!quote.error } : null} analysis={aiResponse?.data ?? null} chartImageAnalysis={activeChart ?? pendingChart} initialBalance={journalBalance.userId === userId ? journalBalance.value : NaN} onTradesChange={setTrades} getPreTradeSource={getPreTradeSource} /> : view !== "analysis" && view !== "chart" && <LoginRequired />}
       <footer className="page-footer"><span>AI FX Analyst</span><p>分析は条件付きの参考情報です。WAITも正常な判断です。</p><span>PROTOTYPE / TASK 017</span></footer>
     </main>
   </>;

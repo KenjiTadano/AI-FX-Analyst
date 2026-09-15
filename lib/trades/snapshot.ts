@@ -1,7 +1,10 @@
 import { factorCategories, tradeSignals, type AIAnalysis, type AnalysisFactor, type TradeSignal } from "../ai/types";
 import { sanitizeStructuredEntryTrigger } from "../ai/entry-trigger";
 import { chartTrendDirections, type ChartImageAnalysis, type ChartTrendDirection } from "../chart-analysis/types";
+import type { DailyTradingPlan } from "../trading-plan/daily-plan";
+import type { EntryReadiness } from "../trading-plan/entry-readiness";
 import { pairs, type TradeAnalysisSnapshot, type TradeAiAnalysisSnapshot, type TradeChartAnalysisSnapshot, type TradePair, type AiAlignment } from "./types";
+import { capturePreTradeContext, sanitizePreTradeContext } from "./pre-trade-context";
 
 const TEXT = (max: number) => (value: unknown) => typeof value === "string" ? value.trim().slice(0, max) : null;
 const NUM = (min: number, max: number) => (value: unknown) => typeof value === "number" && Number.isFinite(value) && value >= min && value <= max ? value : null;
@@ -106,11 +109,14 @@ export type CaptureSnapshotInput = {
   marketPrice?: number | null;
   chartImageAnalysis?: ChartImageAnalysis | null;
   saveSnapshot?: boolean;
+  dailyPlan?: DailyTradingPlan | null;
+  readiness?: EntryReadiness | null;
+  distanceToTriggerPips?: number | null;
 };
 
 /** Build a sanitized, versioned snapshot. Pair mismatch / opt-out / missing analysis → null (trade itself still succeeds). */
 export function captureTradeAiSnapshot(input: CaptureSnapshotInput): TradeAiAnalysisSnapshot | null {
-  const { analysis, pair, now, marketPrice = null, chartImageAnalysis = null, saveSnapshot = true } = input;
+  const { analysis, pair, now, marketPrice = null, chartImageAnalysis = null, saveSnapshot = true, dailyPlan = null, readiness = null, distanceToTriggerPips = null } = input;
   if (!saveSnapshot || !analysis || !pairs.includes(pair as TradePair) || analysis.pair !== pair) return null;
   const capturedAt = ISO(now);
   if (!capturedAt) return null;
@@ -214,6 +220,7 @@ export function captureTradeAiSnapshot(input: CaptureSnapshotInput): TradeAiAnal
     aiCode: analysis.ai.code === null ? null : scrub(TEXT(80)(analysis.ai.code) ?? "error"),
     isFallback: analysis.ai.status !== "available",
     entryTrigger: sanitizeStructuredEntryTrigger(analysis.entryTrigger, pair),
+    preTradeContext: capturePreTradeContext({ pair, capturedAt, analysis, dailyPlan, readiness, distanceToTriggerPips }),
   };
   return sanitizeTradeAiSnapshot(snapshot);
 }
@@ -237,9 +244,11 @@ export function sanitizeTradeAiSnapshot(raw: unknown): TradeAiAnalysisSnapshot |
   const expiresAt = ISO(value.expiresAt);
   if (score === null || confidence === null || dataQualityScore === null || !summary || !analyzedAt || !capturedAt || !expiresAt) return null;
   if (typeof value.isFallback !== "boolean") return null;
-  if (SECRET_PAYLOAD.test(JSON.stringify(value))) return null;
+  const withoutContext = { ...value, preTradeContext: null };
+  if (SECRET_PAYLOAD.test(JSON.stringify(withoutContext))) return null;
   const snapshot = value as unknown as TradeAiAnalysisSnapshot;
   snapshot.entryTrigger = sanitizeStructuredEntryTrigger(value.entryTrigger, String(value.pair));
+  snapshot.preTradeContext = sanitizePreTradeContext(value.preTradeContext, String(value.pair));
   return snapshot;
 }
 

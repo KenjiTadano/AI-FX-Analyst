@@ -78,7 +78,8 @@ export type AnalysisFixtureName =
   | "event-unavailable"
   | "trigger-price-below"
   | "trigger-candle-below"
-  | "trigger-stale";
+  | "trigger-stale"
+  | "trigger-event-unavailable";
 
 export function analysisFixture(
   name: AnalysisFixtureName,
@@ -157,6 +158,17 @@ export function analysisFixture(
   }
   if (name === "trigger-stale") {
     return { ...base, directionSignal: "sell", action: "WAIT", signal: "wait", scenario: SHORT_SCENARIO, entryTrigger: priceBelowTrigger(pair) };
+  }
+  if (name === "trigger-event-unavailable") {
+    return {
+      ...base,
+      directionSignal: "sell",
+      action: "WAIT",
+      signal: "wait",
+      scenario: SHORT_SCENARIO,
+      entryTrigger: priceBelowTrigger(pair),
+      economicRisk: { active: false, known: false, reasons: [], nextHigh: null },
+    };
   }
   return { ...base, directionSignal: "wait", action: "WAIT", signal: "wait", scenario: null };
 }

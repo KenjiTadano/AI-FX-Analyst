@@ -1,5 +1,8 @@
 import type { AIAnalysis } from "../ai/types";
 import type { ChartImageAnalysis } from "../chart-analysis/types";
+import type { DailyTradingPlan } from "../trading-plan/daily-plan";
+import type { EntryReadiness } from "../trading-plan/entry-readiness";
+import { buildEntryTriggerWatch } from "../trading-plan/entry-trigger-watch";
 import { pnl } from "./calculations";
 import { captureTradeAiSnapshot } from "./snapshot";
 import { validateDraft, validateTrade } from "./validation";
@@ -9,11 +12,26 @@ export type CreateTradeOptions = {
   chartImageAnalysis?: ChartImageAnalysis | null;
   marketPrice?: number | null;
   saveSnapshot?: boolean;
+  dailyPlan?: DailyTradingPlan | null;
+  readiness?: EntryReadiness | null;
 };
 
 /** @deprecated Prefer createTrade options; kept for existing tests. */
 export function captureAnalysis(analysis: AIAnalysis | null, pair: string, now: string, options?: Omit<CreateTradeOptions, "saveSnapshot">): TradeAnalysisSnapshot | null {
   return captureTradeAiSnapshot({ analysis, pair, now, marketPrice: options?.marketPrice ?? null, chartImageAnalysis: options?.chartImageAnalysis ?? null, saveSnapshot: true });
+}
+
+function distanceFromReadiness(pair: string, readiness: EntryReadiness | null | undefined): number | null {
+  if (!readiness?.triggerEvaluation) return null;
+  return buildEntryTriggerWatch({
+    trigger: readiness.entryTrigger,
+    evaluation: readiness.triggerEvaluation,
+    action: readiness.action,
+    direction: readiness.direction,
+    stale: readiness.stale,
+    dailyLossLimitReached: readiness.dailyLossLimitReached,
+    pair,
+  })?.distanceToTriggerPips ?? null;
 }
 
 export function createTrade(draft: TradeDraft, analysis: AIAnalysis | null, id: string, now: string, options?: CreateTradeOptions): Result<Trade> {
@@ -32,6 +50,9 @@ export function createTrade(draft: TradeDraft, analysis: AIAnalysis | null, id: 
       marketPrice: options?.marketPrice ?? null,
       chartImageAnalysis: options?.chartImageAnalysis ?? null,
       saveSnapshot: options?.saveSnapshot !== false,
+      dailyPlan: options?.dailyPlan ?? null,
+      readiness: options?.readiness ?? null,
+      distanceToTriggerPips: distanceFromReadiness(draft.pair, options?.readiness),
     }),
   });
 }

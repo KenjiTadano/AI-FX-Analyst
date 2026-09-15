@@ -1,9 +1,42 @@
 import type { TradeSignal, AnalysisFactor, Availability } from "../ai/types";
 import type { ChartTrendDirection } from "../chart-analysis/types";
-import type { StructuredEntryTrigger } from "../ai/entry-trigger";
+import type { EntryTriggerEvaluationStatus, StructuredEntryTrigger } from "../ai/entry-trigger";
 
 export const pairs = ["USD/JPY", "EUR/JPY", "GBP/JPY"] as const;
 export type TradePair = (typeof pairs)[number];
+
+export interface PreTradeTriggerEvaluationSnapshot {
+  status: EntryTriggerEvaluationStatus;
+  observedValue: number | null;
+  checkedAt: string | null;
+  distanceToTriggerPips: number | null;
+}
+
+export interface PreTradeContextSnapshot {
+  version: 1;
+  capturedAt: string;
+  pair: TradePair;
+  direction: "BUY" | "SELL" | "NEUTRAL" | null;
+  action: "BUY" | "SELL" | "WAIT" | null;
+  readiness: {
+    confirmedCount: number;
+    totalCount: 5;
+    state: "ready_to_review" | "waiting" | "warning" | "unavailable";
+  } | null;
+  trigger: {
+    structuredTrigger: StructuredEntryTrigger;
+    evaluation: PreTradeTriggerEvaluationSnapshot;
+  } | null;
+  dataQuality: { score: number | null } | null;
+  confidence: number | null;
+  eventRisk: { level: "high" | "medium" | "low" | "unknown"; available: boolean } | null;
+  risk: { capital: number; riskPercent: number; riskPerTrade: number } | null;
+  dailyLossLimitPercent: number | null;
+  dailyLossRemaining: number | null;
+  dailyLossLimitReached: boolean;
+  analysisStale: boolean;
+  eventRiskHigh: boolean;
+}
 
 /** Legacy Task007/008 snapshot (no version). Still accepted for backward compatibility. */
 export interface TradeAnalysisSnapshot {
@@ -87,6 +120,7 @@ export interface TradeAiAnalysisSnapshot extends TradeAnalysisSnapshot {
   aiCode: string | null;
   isFallback: boolean;
   entryTrigger?: StructuredEntryTrigger | null;
+  preTradeContext?: PreTradeContextSnapshot | null;
 }
 
 export type AiAlignment = "aligned" | "contrary" | "wait_override" | "neutral" | "unavailable";

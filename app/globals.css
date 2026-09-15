@@ -346,6 +346,13 @@ h2 { font-size: 17px; font-weight: 600; margin-top: 4px; }
 .snapshot-card p { margin: 4px 0; overflow-wrap: anywhere; }
 .snapshot-detail { font-size: 12px; line-height: 1.8; color: #c5d2e3; }
 .snapshot-detail p { margin: 6px 0; overflow-wrap: anywhere; }
+.pretrade-preview, .pretrade-context { margin-top: 10px; min-width: 0; }
+.pretrade-preview p, .pretrade-context p { overflow-wrap: anywhere; }
+.pretrade-context h4 { margin: 8px 0 4px; font-size: 13px; }
+.pretrade-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 4px 12px; margin: 8px 0; min-width: 0; }
+.pretrade-grid div { display: grid; grid-template-columns: 7.5rem minmax(0, 1fr); gap: 8px; min-width: 0; }
+.pretrade-grid dt { color: var(--muted); }
+.pretrade-grid dd { margin: 0; overflow-wrap: anywhere; }
 
 /* Task017 Daily Trading Plan */
 .daily-plan-panel { grid-column: 1 / -1; }

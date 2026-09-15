@@ -182,12 +182,41 @@ export async function installDashboardMocks(page: Page, scenario: DashboardScena
       return;
     }
     if (/\/rest\/v1\/trades/.test(url)) {
+      const method = request.method();
+      const headers = {
+        ...cors(request),
+        "content-range": `0-${Math.max(0, rows.length - 1)}/${rows.length}`,
+      };
+      if (method === "POST") {
+        const parsed = request.postDataJSON() as Record<string, unknown> | Record<string, unknown>[] | null;
+        const body = Array.isArray(parsed) ? parsed[0] : parsed;
+        const row = { ...(body ?? {}), version: 1 };
+        rows.push(row as typeof rows[number]);
+        await route.fulfill({ status: 201, headers: cors(request), body: JSON.stringify(row) });
+        return;
+      }
+      if (method === "PATCH") {
+        const id = new URL(request.url()).searchParams.get("id")?.replace(/^eq\./, "") ?? "";
+        const body = (request.postDataJSON() as Record<string, unknown> | null) ?? {};
+        const index = rows.findIndex(row => row.id === id);
+        if (index < 0) {
+          await route.fulfill({ status: 404, headers: cors(request), body: "[]" });
+          return;
+        }
+        const previous = rows[index];
+        const next = {
+          ...previous,
+          ...body,
+          analysis_snapshot: previous.analysis_snapshot,
+          version: (previous.version ?? 1) + 1,
+        };
+        rows[index] = next;
+        await route.fulfill({ status: 200, headers: cors(request), body: JSON.stringify(next) });
+        return;
+      }
       await route.fulfill({
         status: 200,
-        headers: {
-          ...cors(request),
-          "content-range": `0-${Math.max(0, rows.length - 1)}/${rows.length}`,
-        },
+        headers,
         body: JSON.stringify(rows),
       });
       return;

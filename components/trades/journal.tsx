@@ -11,7 +11,9 @@ import { TradeForm } from "./trade-form";
 import { TradeList } from "./trade-list";
 import { Performance } from "./performance";
 import { Panel } from "../dashboard/panels";
-export function TradeJournal({ userId, view, pair, quote, analysis, chartImageAnalysis = null, initialBalance, onTradesChange }: { userId: string; view: "analysis" | "trades" | "performance"; pair: string; quote: Quote | null; analysis: AIAnalysis | null; chartImageAnalysis?: ChartImageAnalysis | null; initialBalance: number; onTradesChange?: (trades: Trade[]) => void }) {
+import type { DailyTradingPlan } from "@/lib/trading-plan/daily-plan";
+import type { EntryReadiness } from "@/lib/trading-plan/entry-readiness";
+export function TradeJournal({ userId, view, pair, quote, analysis, chartImageAnalysis = null, initialBalance, onTradesChange, getPreTradeSource }: { userId: string; view: "analysis" | "trades" | "performance"; pair: string; quote: Quote | null; analysis: AIAnalysis | null; chartImageAnalysis?: ChartImageAnalysis | null; initialBalance: number; onTradesChange?: (trades: Trade[]) => void; getPreTradeSource?: () => { plan: DailyTradingPlan; readiness: EntryReadiness } | null }) {
   const repository = useMemo(() => { const client = getBrowserSupabase(); return client ? createCloudRepository(client, userId) : null; }, [userId]);
   const [journal, setJournal] = useState<CloudJournal | null>(null);
   const [local, setLocal] = useState<Trade[]>([]);
@@ -29,8 +31,10 @@ export function TradeJournal({ userId, view, pair, quote, analysis, chartImageAn
       setJournal(result.data); setError(result.error);
       const legacy = tradeRepository.load(); setLocal(legacy.data?.trades ?? []); setLocalError(legacy.error);
     });
-    const clock = setInterval(() => setNow(Date.now()), 1000);
-    return () => { active = false; clearInterval(clock); };
+    const tick = () => setNow(Date.now());
+    const immediate = setTimeout(tick, 0);
+    const clock = setInterval(tick, 1000);
+    return () => { active = false; clearTimeout(immediate); clearInterval(clock); };
   }, [repository]);
   useEffect(() => { onTradesChange?.(journal?.trades ?? []); }, [journal, onTradesChange]);
   async function save(draft: TradeDraft, options?: { saveSnapshot?: boolean }): Promise<string | null> {
@@ -42,6 +46,8 @@ export function TradeJournal({ userId, view, pair, quote, analysis, chartImageAn
         chartImageAnalysis,
         marketPrice: rate,
         saveSnapshot: options?.saveSnapshot !== false,
+        dailyPlan: getPreTradeSource?.()?.plan ?? null,
+        readiness: getPreTradeSource?.()?.readiness ?? null,
       });
     if (!result.data) return result.error;
     setBusy(true);
@@ -83,7 +89,7 @@ export function TradeJournal({ userId, view, pair, quote, analysis, chartImageAn
     {message && <p className="positive" role="status">{message}</p>}
     {view === "trades" && <>
       <div className="journal-toolbar"><h2>トレード記録</h2><button className="journal-primary" disabled={!journal || locked} onClick={() => { setEditor({ trade: null, mode: "new" }); setMessage(""); }}>トレードを記録</button></div>
-      {editor && <TradeForm key={`${editor.mode}-${editor.trade?.id ?? "new"}`} {...editor} pair={pair} rate={rate} analysis={analysis} chartImageAnalysis={chartImageAnalysis} onSave={save} onCancel={() => setEditor(null)} />}
+      {editor && <TradeForm key={`${editor.mode}-${editor.trade?.id ?? "new"}`} {...editor} pair={pair} rate={rate} analysis={analysis} chartImageAnalysis={chartImageAnalysis} getPreTradeSource={getPreTradeSource} onSave={save} onCancel={() => setEditor(null)} />}
       {deleting && <div className="delete-confirm" role="alertdialog" aria-label="取引削除の確認"><p>{deleting.pair}・{deleting.quantity.toLocaleString()}通貨のクラウド記録を削除しますか？この操作は取り消せません。</p><div className="journal-actions"><button disabled={busy} className="negative" onClick={() => void remove()}>削除を確定</button><button disabled={busy} onClick={() => setDeleting(null)}>削除をキャンセル</button></div></div>}
       <Panel title="保有ポジション" eyebrow="OPEN POSITIONS"><p className="footnote">含み損益は選択中の通貨の新鮮なレートがある場合のみ表示します。</p><TradeList trades={sorted.filter(t => t.status === "open")} quote={quote} now={now} onEdit={locked ? undefined : trade => setEditor({ trade, mode: "edit" })} onClose={locked ? undefined : trade => setEditor({ trade, mode: "close" })} onDelete={locked ? undefined : setDeleting} /></Panel>
       <Panel title="取引履歴" eyebrow="CLOSED TRADES"><TradeList trades={sorted.filter(t => t.status === "closed")} quote={quote} now={now} onEdit={locked ? undefined : trade => setEditor({ trade, mode: "edit" })} onDelete={locked ? undefined : setDeleting} /></Panel>
