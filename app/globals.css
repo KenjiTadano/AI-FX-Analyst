@@ -360,6 +360,26 @@ h2 { font-size: 17px; font-weight: 600; margin-top: 4px; }
 .pretrade-review-warning, .pretrade-review-info { min-width: 0; padding: 8px 10px; border-radius: 8px; font-size: 13px; line-height: 1.6; overflow-wrap: anywhere; }
 .pretrade-review-warning { border: 1px solid #6a5230; background: #241c12; color: #f0d9a8; }
 .pretrade-review-info { border: 1px solid #3a4d66; background: #152234; color: #c5d2e3; }
+.posttrade-review { margin-top: 12px; padding: 14px; border: 1px solid var(--border); border-radius: 10px; background: #0d1623; min-width: 0; }
+.posttrade-review h4 { margin: 0 0 8px; font-size: 14px; overflow-wrap: anywhere; }
+.posttrade-review-intent { display: grid; gap: 2px; margin: 0 0 8px; }
+.posttrade-review-intent strong, .posttrade-review-intent span { overflow-wrap: anywhere; }
+.posttrade-review-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px 12px; margin: 8px 0; min-width: 0; }
+.posttrade-review-grid > div { min-width: 0; }
+.posttrade-review-grid dt { color: var(--muted); font-size: 11px; }
+.posttrade-review-grid dd { margin: 2px 0 0; overflow-wrap: anywhere; }
+.posttrade-review-labels { margin-top: 12px; min-width: 0; }
+.posttrade-review-labels p { margin: 0 0 6px; font-size: 13px; }
+.posttrade-review-labels ul { margin: 0; padding-left: 1.2em; font-size: 13px; line-height: 1.7; overflow-wrap: anywhere; }
+@media (min-width: 800px) {
+  .posttrade-review-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (min-width: 1100px) {
+  .posttrade-review-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (max-width: 540px) {
+  .posttrade-review-grid { grid-template-columns: minmax(0, 1fr); }
+}
 @media (min-width: 800px) {
   .pretrade-review-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }

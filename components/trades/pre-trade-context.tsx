@@ -9,10 +9,10 @@ import {
   PRE_TRADE_TITLE,
   formatPreTradeEvent,
   formatPreTradeTriggerStatus,
+  sanitizePreTradeContext,
 } from "@/lib/trades/pre-trade-context";
 import { isRichSnapshot } from "@/lib/trades/snapshot";
 import type { Trade } from "@/lib/trades/types";
-import { money } from "./format";
 
 function row(label: string, value: string, testId: string) {
   return <div><dt>{label}</dt><dd data-testid={testId}>{value}</dd></div>;
@@ -24,7 +24,7 @@ export function PreTradeContextDetail({
   trade: Trade;
 }) {
   const snapshot = isRichSnapshot(trade.analysisSnapshot) ? trade.analysisSnapshot : null;
-  const context = snapshot?.preTradeContext ?? null;
+  const context = snapshot ? sanitizePreTradeContext(snapshot.preTradeContext, trade.pair) : null;
   if (!context) {
     return <p className="footnote" data-testid="pretrade-missing">{PRE_TRADE_MISSING}</p>;
   }
@@ -38,8 +38,8 @@ export function PreTradeContextDetail({
       <p className="eyebrow">{PRE_TRADE_EYEBROW}</p>
       <p className="footnote" data-testid="pretrade-source-note">{PRE_TRADE_SOURCE_NOTE}</p>
       <dl className="pretrade-grid">
-        {row("AI方向", context.direction ?? "—", "pretrade-direction")}
-        {row("Action", context.action ?? "—", "pretrade-action")}
+        {row("AI方向", context.direction ?? "未取得", "pretrade-direction")}
+        {row("Action", context.action ?? "未取得", "pretrade-action")}
         {row("準備度", context.readiness ? `${context.readiness.confirmedCount} / ${context.readiness.totalCount}` : "—", "pretrade-readiness")}
         {row("Trigger", formatPreTradeTriggerStatus(context), "pretrade-trigger-status")}
         {trigger && row("条件", triggerExpression(trigger.structuredTrigger), "pretrade-trigger-expression")}
@@ -49,7 +49,9 @@ export function PreTradeContextDetail({
         {row("DQ", context.dataQuality?.score != null ? String(context.dataQuality.score) : "—", "pretrade-dq")}
         {row("Confidence", context.confidence != null ? String(context.confidence) : "—", "pretrade-confidence")}
         {row("Event", formatPreTradeEvent(context), "pretrade-event")}
-        {row("Risk", context.risk ? money(context.risk.riskPerTrade) : "—", "pretrade-risk")}
+        {row("分析", context.analysisStale ? "期限切れ分析" : "最新分析", "pretrade-freshness")}
+        {row("Risk", context.risk ? `${context.risk.riskPerTrade.toLocaleString("ja-JP", { maximumFractionDigits: 2 })}円 / ${context.risk.riskPercent.toFixed(1)}%` : "未取得", "pretrade-risk")}
+        {row("Daily Loss Limit", context.dailyLossLimitReached ? "到達" : "未到達", "pretrade-dll-state")}
       </dl>
       {context.analysisStale && <p data-testid="pretrade-stale">分析期限切れの状態で登録</p>}
       {context.dailyLossLimitReached && <p data-testid="pretrade-dll">Daily Loss Limit到達時に登録</p>}

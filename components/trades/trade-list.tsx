@@ -4,6 +4,7 @@ import { alignmentLabels, computeAiAlignment, isRichSnapshot } from "@/lib/trade
 import { actionGuidanceLabel, directionBiasLabel, signalLabels as decisionLabels } from "@/lib/ai/decision-ui";
 import { dateTime, money, signalLabels, tone } from "./format";
 import { PreTradeContextDetail } from "./pre-trade-context";
+import { PostTradeReview } from "./post-trade-review";
 
 export function TradeList({ trades, quote, now, onEdit, onClose, onDelete }: { trades: Trade[]; quote: Quote | null; now: number; onEdit?: (t: Trade) => void; onClose?: (t: Trade) => void; onDelete?: (t: Trade) => void }) {
   if (!trades.length) return <p className="material-empty">該当する取引はありません。</p>;
@@ -46,9 +47,10 @@ export function TradeList({ trades, quote, now, onEdit, onClose, onDelete }: { t
           </>}
           {snapshot.pair !== trade.pair && <p className="neutral">元の分析は{snapshot.pair}です。通貨変更後の成績はAI未記録扱いです。</p>}
           <p className="footnote">この分析は登録時の表示内容です。後からの再分析では変わりません。</p>
-          <PreTradeContextDetail trade={trade} />
+          {trade.status !== "closed" && <PreTradeContextDetail trade={trade} />}
         </div>
-      </details> : <><p className="footnote">エントリー時AI分析：保存なし</p><PreTradeContextDetail trade={trade} /></>}
+      </details> : trade.status !== "closed" ? <><p className="footnote">エントリー時AI分析：保存なし</p><PreTradeContextDetail trade={trade} /></> : <p className="footnote">エントリー時AI分析：保存なし</p>}
+      {trade.status === "closed" && <PostTradeReview trade={trade} />}
       {trade.notes && <p className="trade-notes">{trade.notes}</p>}
       {(onEdit || onClose || onDelete) && <div className="journal-actions">{trade.status === "open" && onClose && <button onClick={() => onClose(trade)}>決済を記録</button>}{onEdit && <button onClick={() => onEdit(trade)}>編集</button>}{onDelete && <button className="negative" onClick={() => onDelete(trade)}>削除</button>}</div>}
     </article>;

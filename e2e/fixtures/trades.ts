@@ -60,6 +60,7 @@ function closedTrade(args: {
   exitPrice: number;
   pair?: Trade["pair"];
   snapshot?: TradeAiAnalysisSnapshot | null;
+  notes?: string;
 }): Trade {
   const quantity = 1000;
   const realizedPnl = pnl(args.side, args.entryPrice, args.exitPrice, quantity);
@@ -76,7 +77,7 @@ function closedTrade(args: {
     closedAt: args.closedAt,
     stopLoss: null,
     takeProfit: null,
-    notes: "e2e",
+    notes: args.notes ?? "e2e",
     realizedPnl,
     analysisSnapshot: args.snapshot ?? null,
     createdAt: args.openedAt,
@@ -276,6 +277,7 @@ function contextTrade(args: {
     side: "short",
     entryPrice: 156.5,
     exitPrice: args.exitPrice,
+    notes: args.notes,
     snapshot: richSnapshot({
       analyzedAt: args.openedAt,
       capturedAt: args.openedAt,
@@ -351,6 +353,112 @@ export function preTradeContextClosedTrades(now = Date.now()): Trade[] {
     contextTrade({ id: t023Id(17), openedAt: recent, closedAt: recent, exitPrice: 156.0, context: eventUnavailable, notes: "t023-event-unavailable" }),
     contextTrade({ id: t023Id(18), openedAt: recent, closedAt: recent, exitPrice: 157.0, context: dll, notes: "t023-dll" }),
   ];
+}
+
+export function postTradeReviewTrades(now = Date.now()): Trade[] {
+  const recent = daysAgo(5, now);
+  const holdLongOpen = iso(now - (27 * 60 + 0) * 60_000);
+  const hold235Open = iso(now - (2 * 60 + 35) * 60_000);
+  const hold35Open = iso(now - 35 * 60_000);
+  const closedAt = iso(now);
+  const met = preTradeSnapshotContext({ action: "WAIT", analysisStale: false }, closedAt);
+  const notMetZero = preTradeSnapshotContext({
+    action: "WAIT",
+    trigger: {
+      structuredTrigger: met.trigger!.structuredTrigger,
+      evaluation: { status: "not_met", observedValue: 156.2, checkedAt: closedAt, distanceToTriggerPips: 0 },
+    },
+  }, closedAt);
+  const eventUnavailable = preTradeSnapshotContext({
+    action: "WAIT",
+    eventRisk: { level: "unknown", available: false },
+    eventRiskHigh: false,
+  }, closedAt);
+  const stale = preTradeSnapshotContext({ action: "WAIT", analysisStale: true }, closedAt);
+  const dll = preTradeSnapshotContext({ action: "WAIT", dailyLossLimitReached: true, dailyLossRemaining: 0 }, closedAt);
+  const mismatch = preTradeSnapshotContext({ pair: "EUR/JPY", action: "WAIT" }, closedAt);
+
+  return [
+    contextTrade({
+      id: t025Id(1),
+      openedAt: recent,
+      closedAt: recent,
+      exitPrice: 156.0,
+      status: "open",
+      context: met,
+      notes: "t025-open",
+    }),
+    contextTrade({ id: t025Id(2), openedAt: hold235Open, closedAt, exitPrice: 156.0, context: met, notes: "t025-profit" }),
+    contextTrade({ id: t025Id(3), openedAt: hold35Open, closedAt, exitPrice: 157.0, context: met, notes: "t025-loss" }),
+    contextTrade({ id: t025Id(4), openedAt: hold35Open, closedAt, exitPrice: 156.5, context: met, notes: "t025-flat" }),
+    closedTrade({
+      id: t025Id(5),
+      openedAt: holdLongOpen,
+      closedAt,
+      side: "long",
+      entryPrice: 156.5,
+      exitPrice: 156.0,
+      notes: "t025-buy-sell",
+      snapshot: richSnapshot({
+        analyzedAt: holdLongOpen,
+        capturedAt: holdLongOpen,
+        expiresAt: holdLongOpen,
+        directionSignal: "sell",
+        action: "WAIT",
+        preTradeContext: { ...met, capturedAt: holdLongOpen },
+      }),
+    }),
+    contextTrade({ id: t025Id(6), openedAt: hold35Open, closedAt, exitPrice: 156.0, context: notMetZero, notes: "t025-equality" }),
+    contextTrade({ id: t025Id(7), openedAt: hold35Open, closedAt, exitPrice: 157.0, context: eventUnavailable, notes: "t025-event" }),
+    contextTrade({ id: t025Id(8), openedAt: hold35Open, closedAt, exitPrice: 156.0, context: stale, notes: "t025-stale" }),
+    contextTrade({ id: t025Id(9), openedAt: hold35Open, closedAt, exitPrice: 157.0, context: dll, notes: "t025-dll" }),
+    closedTrade({
+      id: t025Id(10),
+      openedAt: hold35Open,
+      closedAt,
+      side: "short",
+      entryPrice: 156.5,
+      exitPrice: 156.0,
+      notes: "t025-legacy",
+    }),
+    closedTrade({
+      id: t025Id(11),
+      openedAt: hold35Open,
+      closedAt,
+      side: "short",
+      entryPrice: 156.5,
+      exitPrice: 156.0,
+      notes: "t025-ai-only",
+      snapshot: richSnapshot({
+        analyzedAt: hold35Open,
+        capturedAt: hold35Open,
+        expiresAt: hold35Open,
+        directionSignal: "sell",
+        action: "WAIT",
+      }),
+    }),
+    closedTrade({
+      id: t025Id(12),
+      openedAt: hold35Open,
+      closedAt,
+      side: "short",
+      entryPrice: 156.5,
+      exitPrice: 156.0,
+      notes: "t025-mismatch",
+      snapshot: richSnapshot({
+        analyzedAt: hold35Open,
+        capturedAt: hold35Open,
+        expiresAt: hold35Open,
+        directionSignal: "sell",
+        action: "WAIT",
+        preTradeContext: mismatch,
+      }),
+    }),
+  ];
+}
+
+function t025Id(n: number): string {
+  return `11111111-1111-4111-8111-111111111${String(400 + n).padStart(3, "0")}`;
 }
 
 export function settingsRow(now = Date.now()) {
