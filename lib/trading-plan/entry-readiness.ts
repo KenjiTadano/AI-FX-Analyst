@@ -1,6 +1,16 @@
 import { qualityLabel } from "../chart-analysis/normalize";
 import type { AIAnalysis } from "../ai/types";
 import type { RiskSettings } from "../risk/types";
+import type { Candle, Timeframe } from "../market/types";
+import {
+  TRIGGER_DISCLAIMER,
+  TRIGGER_SOURCE_LABEL,
+  TRIGGER_STALE_NOTE,
+  evaluateStructuredEntryTrigger,
+  sanitizeStructuredEntryTrigger,
+  type EntryTriggerEvaluation,
+  type StructuredEntryTrigger,
+} from "../ai/entry-trigger";
 import {
   ANALYSIS_STALE_MESSAGE,
   REVIEW_BUY_MESSAGE,
@@ -89,6 +99,11 @@ export interface EntryReadiness {
   confidence: number | null;
   stale: boolean;
   dailyLossLimitReached: boolean;
+  entryTrigger: StructuredEntryTrigger | null;
+  triggerEvaluation: EntryTriggerEvaluation | null;
+  triggerSourceLabel: string;
+  triggerDisclaimer: string;
+  triggerStaleNote: string | null;
 }
 
 export interface EntryReadinessInput {
@@ -96,6 +111,9 @@ export interface EntryReadinessInput {
   analysis: AIAnalysis | null | undefined;
   dailyPlan: DailyTradingPlan;
   riskSettings: RiskSettings | null | undefined;
+  currentRate?: number | null;
+  candlesByTimeframe?: Partial<Record<Timeframe, { candles: Candle[]; lastClosedAt: string | null } | null>>;
+  now?: Date | number | string;
 }
 
 function check(
@@ -235,6 +253,18 @@ export function buildEntryReadiness(input: EntryReadinessInput): EntryReadiness 
 
   const action = analysis ? plan.action : null;
   const direction = analysis ? plan.direction : "NEUTRAL";
+  const rawTrigger = analysis?.entryTrigger;
+  const hasStructuredTrigger = rawTrigger != null;
+  const entryTrigger = hasStructuredTrigger ? sanitizeStructuredEntryTrigger(rawTrigger, pair) : null;
+  const triggerEvaluation = hasStructuredTrigger
+    ? evaluateStructuredEntryTrigger({
+      trigger: rawTrigger,
+      pair,
+      currentRate: input.currentRate !== undefined ? input.currentRate : plan.currentRate,
+      candlesByTimeframe: input.candlesByTimeframe,
+      now: input.now ?? Date.now(),
+    })
+    : null;
   const actionMessage = action === "WAIT"
     ? WAIT_ACTION_MESSAGE
     : action === "BUY"
@@ -278,5 +308,10 @@ export function buildEntryReadiness(input: EntryReadinessInput): EntryReadiness 
     confidence: analysis ? plan.confidence : null,
     stale,
     dailyLossLimitReached,
+    entryTrigger,
+    triggerEvaluation,
+    triggerSourceLabel: TRIGGER_SOURCE_LABEL,
+    triggerDisclaimer: TRIGGER_DISCLAIMER,
+    triggerStaleNote: stale && triggerEvaluation ? TRIGGER_STALE_NOTE : null,
   };
 }

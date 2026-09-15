@@ -1,5 +1,6 @@
 import type { TradeSignal, AnalysisFactor, Availability } from "../ai/types";
 import type { ChartTrendDirection } from "../chart-analysis/types";
+import type { StructuredEntryTrigger } from "../ai/entry-trigger";
 
 export const pairs = ["USD/JPY", "EUR/JPY", "GBP/JPY"] as const;
 export type TradePair = (typeof pairs)[number];
@@ -85,6 +86,7 @@ export interface TradeAiAnalysisSnapshot extends TradeAnalysisSnapshot {
   chartAnalysis: TradeChartAnalysisSnapshot | null;
   aiCode: string | null;
   isFallback: boolean;
+  entryTrigger?: StructuredEntryTrigger | null;
 }
 
 export type AiAlignment = "aligned" | "contrary" | "wait_override" | "neutral" | "unavailable";

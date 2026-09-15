@@ -1,4 +1,5 @@
 import type { AIAnalysis, DataQuality, TradeScenario } from "../../lib/ai/types";
+import type { StructuredEntryTrigger } from "../../lib/ai/entry-trigger";
 import type { Symbol } from "../../lib/market/types";
 
 const quality = (score = 82): DataQuality => ({
@@ -43,6 +44,28 @@ export const LONG_TEXT_SCENARIO: TradeScenario = {
   condition: "156.20を下抜けたあと、1時間足の戻り安値が切り下がっていることと、直近の高値を更新しないことを確認してから売り検討する。価格は分析に含まれる値以外を使わない。",
 };
 
+export function priceBelowTrigger(pair: Symbol = "USD/JPY"): StructuredEntryTrigger {
+  return {
+    version: 1,
+    type: "price_below",
+    pair,
+    price: 156.2,
+    timeframe: null,
+    sourceCondition: "現在価格が156.20を下回った場合",
+  };
+}
+
+export function candleBelowTrigger(pair: Symbol = "USD/JPY"): StructuredEntryTrigger {
+  return {
+    version: 1,
+    type: "candle_close_below",
+    pair,
+    price: 156.2,
+    timeframe: "15min",
+    sourceCondition: "15分足が156.20より下で確定した場合",
+  };
+}
+
 export type AnalysisFixtureName =
   | "sell-wait"
   | "buy-wait"
@@ -52,14 +75,17 @@ export type AnalysisFixtureName =
   | "chart-evidence"
   | "long-condition"
   | "no-sl-tp"
-  | "event-unavailable";
+  | "event-unavailable"
+  | "trigger-price-below"
+  | "trigger-candle-below"
+  | "trigger-stale";
 
 export function analysisFixture(
   name: AnalysisFixtureName,
   now = Date.now(),
   pair: Symbol = "USD/JPY",
 ): AIAnalysis {
-  const analyzedAt = new Date(name === "stale" ? now - 10 * 60_000 : now - 30_000).toISOString();
+  const analyzedAt = new Date(name === "stale" || name === "trigger-stale" ? now - 10 * 60_000 : now - 30_000).toISOString();
   const expiresAt = new Date(now + 5 * 60_000).toISOString();
   const base: AIAnalysis = {
     pair,
@@ -83,6 +109,7 @@ export function analysisFixture(
     decisionReasons: ["条件待ち"],
     ai: { status: "available", model: "e2e-fixture", code: null, message: null },
     chartEvidence: null,
+    entryTrigger: null,
   };
   if (name === "sell-wait") {
     return { ...base, directionSignal: "sell", action: "WAIT", signal: "wait", scenario: SHORT_SCENARIO };
@@ -121,6 +148,15 @@ export function analysisFixture(
       scenario: SHORT_SCENARIO,
       economicRisk: { active: false, known: false, reasons: [], nextHigh: null },
     };
+  }
+  if (name === "trigger-price-below") {
+    return { ...base, directionSignal: "sell", action: "WAIT", signal: "wait", scenario: SHORT_SCENARIO, entryTrigger: priceBelowTrigger(pair) };
+  }
+  if (name === "trigger-candle-below") {
+    return { ...base, directionSignal: "sell", action: "WAIT", signal: "wait", scenario: SHORT_SCENARIO, entryTrigger: candleBelowTrigger(pair) };
+  }
+  if (name === "trigger-stale") {
+    return { ...base, directionSignal: "sell", action: "WAIT", signal: "wait", scenario: SHORT_SCENARIO, entryTrigger: priceBelowTrigger(pair) };
   }
   return { ...base, directionSignal: "wait", action: "WAIT", signal: "wait", scenario: null };
 }

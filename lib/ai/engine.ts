@@ -3,6 +3,7 @@ import { categoryLabels } from "./input";
 import { directionValue, scoreDirection } from "./technical";
 import { generateScenario } from "./scenario";
 import { factorCategories, type AIAnalysis, type AIErrorCode, type AnalysisInput, type ModelInterpretation, type TradeSignal } from "./types";
+import { sanitizeStructuredEntryTrigger } from "./entry-trigger";
 
 export const aiMessages: Record<AIErrorCode, string> = {
   not_configured: "OPENAI_API_KEYが未設定です。テクニカル評価のみ表示しています。",
@@ -66,5 +67,6 @@ export function finalizeAnalysis(input: AnalysisInput, interpretation: ModelInte
       trend: input.chartImageAnalysis.trend.direction,
       qualityScore: input.chartImageAnalysis.dataQuality.score,
     } : null,
+    entryTrigger: sanitizeStructuredEntryTrigger(interpretation?.entryTrigger, input.pair),
   };
 }

@@ -25,6 +25,10 @@ export type DashboardScenario = {
   dailyLossLimitPercent?: number | null;
   includeTrades?: boolean;
   calendar?: CalendarFixtureName;
+  marketPrice?: number;
+  candleClose?: number;
+  marketStale?: boolean;
+  omitCandles?: boolean;
 };
 
 function cors(request: Request): Record<string, string> {
@@ -123,7 +127,16 @@ export async function installDashboardMocks(page: Page, scenario: DashboardScena
 
   await context.route(/\/api\/market(?:\?|$)/, async route => {
     const symbol = (new URL(route.request().url()).searchParams.get("symbol") ?? "USD/JPY") as Symbol;
-    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(marketFixture(symbol, now)) });
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(marketFixture(symbol, now, {
+        price: scenario.marketPrice,
+        candleClose: scenario.candleClose,
+        stale: scenario.marketStale,
+        omitCandles: scenario.omitCandles,
+      })),
+    });
   });
 
   await context.route(/\/api\/fundamental(?:\?|$)/, async route => {

@@ -1,4 +1,5 @@
 import { factorCategories, type AIErrorCode, type AnalysisFactor, type AnalysisInput, type ModelInterpretation } from "./types";
+import { entryTriggerSchema, sanitizeStructuredEntryTrigger } from "./entry-trigger";
 
 export class AnalysisError extends Error {
   constructor(public code: AIErrorCode, public detail?: string) {
@@ -20,6 +21,7 @@ chartImageAnalysisまたはtechnical:chart_image証拠がある場合、それ�
 材料が矛盾する場合contradictions=trueとしてconfidenceを下げてください。データ不足、重要指標直前、方向感なし、過熱、低confidenceの場合preferWait=trueを選べます。WAITは正常な判断です。
 confidenceは0〜100で分析の根拠への確信度であり、勝率や方向の強さではありません。dataAvailability.scoreを上限にしてください。
 価格・score・最終signalはサーバーが算出します。数値価格の提案をせず、scenarioCommentは押し目/戻りを待つ等の条件だけを記述してください。
+entryTriggerは任意です。scenarioCommentに、入力evidenceから取れる明確な価格thresholdと判定方法（現在価格か確定足終値か）が両方ある場合のみ構造化してください。価格を推測しないでください。timeframeが明示されていなければentryTrigger=null。現在価格条件か確定足終値条件か曖昧ならnull。複合条件・パターン認識・RSI/MACD/移動平均クロス・出来高・ニュース/センチメント条件はnull。BUY/SELL actionをTriggerから決め直さないでください。versionは1、対応typeはprice_above/price_below/candle_close_above/candle_close_belowのみです。
 summaryと強気/弱気材料はfactorで示した取得済み根拠に限り、未取得情報はriskWarningsへ記載してください。`;
 
 const nonEmptyString = { type: "string", minLength: 1, maxLength: 2000 } as const;
@@ -53,8 +55,9 @@ export const interpretationSchema = {
     contradictions: { type: "boolean" },
     preferWait: { type: "boolean" },
     scenarioComment: nonEmptyString,
+    entryTrigger: entryTriggerSchema,
   },
-  required: ["summary", "factors", "bullishReasons", "bearishReasons", "riskWarnings", "confidence", "contradictions", "preferWait", "scenarioComment"],
+  required: ["summary", "factors", "bullishReasons", "bearishReasons", "riskWarnings", "confidence", "contradictions", "preferWait", "scenarioComment", "entryTrigger"],
 } as const;
 
 const isRecord = (value: unknown): value is Record<string, unknown> => !!value && typeof value === "object" && !Array.isArray(value);
@@ -100,9 +103,10 @@ export function coerceInterpretationFactors(value: unknown, input: AnalysisInput
 /** Safe, non-secret reason for invalid model JSON. Returns null when valid. */
 export function interpretationFailureReason(value: unknown, input: AnalysisInput): string | null {
   if (!isRecord(value)) return "root_not_object";
-  const allowed = interpretationSchema.required as readonly string[];
+  const coreRequired = ["summary", "factors", "bullishReasons", "bearishReasons", "riskWarnings", "confidence", "contradictions", "preferWait", "scenarioComment"] as const;
+  const allowed = [...coreRequired, "entryTrigger"];
   const extra = Object.keys(value).filter(key => !allowed.includes(key));
-  const missing = allowed.filter(key => !(key in value));
+  const missing = coreRequired.filter(key => !(key in value));
   if (extra.length) return `extra_fields:${extra.join(",")}`;
   if (missing.length) return `missing_fields:${missing.join(",")}`;
   if (!isText(value.summary)) return "invalid_summary";
@@ -146,7 +150,9 @@ export function validateInterpretation(value: unknown, input: AnalysisInput): Mo
   const coerced = coerceInterpretationFactors(value, input);
   const reason = interpretationFailureReason(coerced, input);
   if (reason) throw new AnalysisError("invalid_response", reason);
-  return coerced as unknown as ModelInterpretation;
+  const record = coerced as Record<string, unknown>;
+  const entryTrigger = sanitizeStructuredEntryTrigger(record.entryTrigger, input.pair);
+  return { ...(coerced as unknown as ModelInterpretation), entryTrigger };
 }
 
 function shouldExposeValidationDetail(): boolean {

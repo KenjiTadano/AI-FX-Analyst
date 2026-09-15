@@ -1,6 +1,7 @@
 import type { Symbol, Timeframe } from "../market/types";
 import type { EconomicEvent, FundamentalData } from "../fundamental/types";
 import type { ChartImageAnalysis } from "../chart-analysis/types";
+import type { StructuredEntryTrigger } from "./entry-trigger";
 
 export const tradeSignals = ["strong_buy", "buy", "wait", "sell", "strong_sell"] as const;
 export type TradeSignal = (typeof tradeSignals)[number];
@@ -80,6 +81,7 @@ export interface ModelInterpretation {
   contradictions: boolean;
   preferWait: boolean;
   scenarioComment: string;
+  entryTrigger?: StructuredEntryTrigger | null;
 }
 export type AIErrorCode = "not_configured" | "api_error" | "invalid_response" | "timeout" | "rate_limited" | "insufficient_data";
 export interface AIAnalysis {
@@ -105,6 +107,8 @@ export interface AIAnalysis {
   ai: { status: "available" | "unavailable" | "error"; model: string | null; code: AIErrorCode | null; message: string | null };
   /** Present only when a validated ChartImageAnalysis was attached for this run. */
   chartEvidence?: { used: true; timeframe: string | null; trend: ChartImageAnalysis["trend"]["direction"]; qualityScore: number } | null;
+  /** Sanitized structured trigger. Invalid/unstructurable conditions become null. */
+  entryTrigger?: StructuredEntryTrigger | null;
 }
 export type AnalysisResponse = { success: boolean; data: AIAnalysis | null; error: { code: string; message: string } | null; cached: boolean };
 export type FundamentalSnapshot = FundamentalData | null;

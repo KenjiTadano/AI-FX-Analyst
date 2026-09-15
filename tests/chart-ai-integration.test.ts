@@ -75,6 +75,7 @@ function interpretation(input: AnalysisInput, direction: Direction = "neutral"):
       };
     }),
     bullishReasons: [], bearishReasons: [], riskWarnings: [], scenarioComment: "待機確認",
+    entryTrigger: null,
   };
 }
 

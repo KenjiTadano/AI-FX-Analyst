@@ -7,31 +7,39 @@ const rates: Record<Symbol, number> = {
   "GBP/JPY": 201.24,
 };
 
-export function marketFixture(symbol: Symbol, now = Date.now()): MarketData {
+export function marketFixture(
+  symbol: Symbol,
+  now = Date.now(),
+  opts: { price?: number; candleClose?: number; stale?: boolean; omitCandles?: boolean } = {},
+): MarketData {
   const fetchedAt = new Date(now).toISOString();
   const lastClosedAt = new Date(now - 15 * 60_000).toISOString();
-  const frame = {
-    data: {
-      candles: [{ time: lastClosedAt, open: rates[symbol], high: rates[symbol] + 0.1, low: rates[symbol] - 0.1, close: rates[symbol] }],
-      indicators: {
-        sma20: rates[symbol] - 0.2,
-        sma75: rates[symbol] - 0.4,
-        sma200: rates[symbol] - 0.8,
-        rsi14: 48,
-        atr14: 0.2,
-        recentHigh: rates[symbol] + 0.3,
-        recentLow: rates[symbol] - 0.3,
-        trend: "neutral" as const,
+  const quote = opts.price ?? rates[symbol];
+  const close = opts.candleClose ?? quote;
+  const frame = opts.omitCandles
+    ? { data: null, fetchedAt, error: "E2E candle omitted", stale: false }
+    : {
+      data: {
+        candles: [{ time: lastClosedAt, open: close, high: close + 0.1, low: close - 0.1, close }],
+        indicators: {
+          sma20: close - 0.2,
+          sma75: close - 0.4,
+          sma200: close - 0.8,
+          rsi14: 48,
+          atr14: 0.2,
+          recentHigh: close + 0.3,
+          recentLow: close - 0.3,
+          trend: "neutral" as const,
+        },
+        lastClosedAt,
       },
-      lastClosedAt,
-    },
-    fetchedAt,
-    error: null,
-    stale: false,
-  };
+      fetchedAt,
+      error: null,
+      stale: false,
+    };
   return {
     symbol,
-    price: { data: rates[symbol], fetchedAt, error: null, stale: false },
+    price: { data: quote, fetchedAt, error: null, stale: !!opts.stale },
     timeframes: { "15m": frame, "1h": frame, "4h": frame },
   };
 }

@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import type { AIAnalysis } from "@/lib/ai/types";
 import type { DataResource, EconomicEvent } from "@/lib/fundamental/types";
+import type { MarketData } from "@/lib/market/types";
 import type { RiskSettings } from "@/lib/risk/types";
 import type { Trade } from "@/lib/trades/types";
 import {
@@ -69,6 +70,7 @@ export function DailyTradingPlanPanel({
   riskSettings,
   currentRate,
   calendar,
+  market = null,
   rateDecimals = 3,
   userId = "",
   onRefresh,
@@ -80,6 +82,7 @@ export function DailyTradingPlanPanel({
   riskSettings: RiskSettings;
   currentRate: number | null;
   calendar?: DataResource<EconomicEvent[]> | null;
+  market?: MarketData | null;
   rateDecimals?: number;
   userId?: string;
   onRefresh?: () => void;
@@ -106,12 +109,23 @@ export function DailyTradingPlanPanel({
     dailyLossLimitPercent: limitPercent,
     now,
   }), [pair, analysis, trades, riskSettings, currentRate, calendar, limitPercent, now]);
+  const candlesByTimeframe = useMemo(() => {
+    if (!market || market.symbol !== pair) return undefined;
+    return {
+      "15m": market.timeframes["15m"]?.data ?? null,
+      "1h": market.timeframes["1h"]?.data ?? null,
+      "4h": market.timeframes["4h"]?.data ?? null,
+    };
+  }, [market, pair]);
   const readiness = useMemo(() => buildEntryReadiness({
     pair,
     analysis,
     dailyPlan: plan,
     riskSettings,
-  }), [pair, analysis, plan, riskSettings]);
+    currentRate,
+    candlesByTimeframe,
+    now,
+  }), [pair, analysis, plan, riskSettings, currentRate, candlesByTimeframe, now]);
 
   function changeLimit(value: string) {
     setLimitDraft(value);

@@ -56,6 +56,7 @@ function interpretation(input: AnalysisInput, direction: Direction = "neutral"):
       impact: "high", reason: "TEST: 取得した材料に基づく評価です。", source: "TEST", evidenceIds: evidence.slice(0, 1).map(item => item.id),
     }; }),
     bullishReasons: [], bearishReasons: [], riskWarnings: [], scenarioComment: "条件成立を待って確認します。",
+    entryTrigger: null,
   };
 }
 function input(direction = 1) { return buildInput("USD/JPY", market("USD/JPY", direction), fundamentals(), now); }
@@ -205,6 +206,9 @@ test("duplicate technical factors and empty source fail with actionable reasons"
   assert.match(JSON.stringify(interpretationSchema.properties.factors), /"minItems":5/);
   assert.match(JSON.stringify(interpretationSchema.properties.factors), /"maxItems":5/);
   assert.match(JSON.stringify(interpretationSchema.properties.factors.items.properties.source), /"minLength":1/);
+  assert.ok("entryTrigger" in interpretationSchema.properties);
+  assert.ok((interpretationSchema.required as readonly string[]).includes("entryTrigger"));
+  assert.equal(interpretationSchema.additionalProperties, false);
 });
 test("chart-backed duplicate technical factors are coalesced before validation", () => {
   const chart = normalizeChartAnalysis({
@@ -259,6 +263,8 @@ test("Responses request uses server header, strict schema, no storage, and no se
     assert.equal(body.store, false); assert.equal(body.text.format.strict, true);
     assert.equal(body.input[0].content, systemPrompt);
     assert.equal(body.input[1].role, "user");
+    assert.ok(body.text.format.schema.properties.entryTrigger);
+    assert.ok(body.text.format.schema.required.includes("entryTrigger"));
     return Response.json({ status: "completed", output: [{ type: "message", content: [{ type: "output_text", text: JSON.stringify(interpretation(snapshot)) }] }] });
   });
   assert.equal((await interpret(snapshot)).confidence, 90);
@@ -326,4 +332,24 @@ test("analysis cache expires before a high-impact release enters its risk window
   assert.equal(result.expiresAt, iso(now + 2 * 60_000));
   const late = finalizeAnalysis(snapshot, interpretation(snapshot), model, null, now + 2 * 60_000);
   assert.equal(late.signal, "wait");
+});
+
+test("invalid entryTrigger is dropped without failing analysis (chartless GET path)", () => {
+  const snapshot = input();
+  const valid = interpretation(snapshot);
+  assert.match(systemPrompt, /entryTriggerは任意/);
+  const parsed = validateInterpretation({ ...valid, entryTrigger: { version: 1, type: "rsi_cross", pair: "USD/JPY", price: 156.2, timeframe: null, sourceCondition: null } }, snapshot);
+  assert.equal(parsed.entryTrigger, null);
+  const result = finalizeAnalysis(snapshot, { ...valid, entryTrigger: { version: 1, type: "rsi_cross" as never, pair: "USD/JPY", price: 156.2, timeframe: null, sourceCondition: null } }, model, null, now);
+  assert.equal(result.entryTrigger, null);
+  assert.ok(result.signal);
+});
+
+test("valid entryTrigger survives chart-assisted interpretation without extra OpenAI fields", () => {
+  const snapshot = input();
+  const trigger = { version: 1 as const, type: "price_below" as const, pair: "USD/JPY" as const, price: 156.2, timeframe: null, sourceCondition: "現在価格が156.20を下回った場合" };
+  const parsed = validateInterpretation({ ...interpretation(snapshot), entryTrigger: trigger }, snapshot);
+  assert.deepEqual(parsed.entryTrigger, trigger);
+  const result = finalizeAnalysis(snapshot, parsed, model, null, now);
+  assert.deepEqual(result.entryTrigger, trigger);
 });

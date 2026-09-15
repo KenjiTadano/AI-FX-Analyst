@@ -1,4 +1,5 @@
 import { factorCategories, tradeSignals, type AIAnalysis, type AnalysisFactor, type TradeSignal } from "../ai/types";
+import { sanitizeStructuredEntryTrigger } from "../ai/entry-trigger";
 import { chartTrendDirections, type ChartImageAnalysis, type ChartTrendDirection } from "../chart-analysis/types";
 import { pairs, type TradeAnalysisSnapshot, type TradeAiAnalysisSnapshot, type TradeChartAnalysisSnapshot, type TradePair, type AiAlignment } from "./types";
 
@@ -212,6 +213,7 @@ export function captureTradeAiSnapshot(input: CaptureSnapshotInput): TradeAiAnal
     chartAnalysis,
     aiCode: analysis.ai.code === null ? null : scrub(TEXT(80)(analysis.ai.code) ?? "error"),
     isFallback: analysis.ai.status !== "available",
+    entryTrigger: sanitizeStructuredEntryTrigger(analysis.entryTrigger, pair),
   };
   return sanitizeTradeAiSnapshot(snapshot);
 }
@@ -236,8 +238,9 @@ export function sanitizeTradeAiSnapshot(raw: unknown): TradeAiAnalysisSnapshot |
   if (score === null || confidence === null || dataQualityScore === null || !summary || !analyzedAt || !capturedAt || !expiresAt) return null;
   if (typeof value.isFallback !== "boolean") return null;
   if (SECRET_PAYLOAD.test(JSON.stringify(value))) return null;
-  // Trust capture-built objects; reject only when required shape is incomplete.
-  return value as unknown as TradeAiAnalysisSnapshot;
+  const snapshot = value as unknown as TradeAiAnalysisSnapshot;
+  snapshot.entryTrigger = sanitizeStructuredEntryTrigger(value.entryTrigger, String(value.pair));
+  return snapshot;
 }
 
 export function sanitizePersistedSnapshot(raw: unknown): TradeAnalysisSnapshot | TradeAiAnalysisSnapshot | null {
