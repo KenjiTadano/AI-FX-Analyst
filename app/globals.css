@@ -99,6 +99,21 @@ h2 { font-size: 17px; font-weight: 600; margin-top: 4px; }
 .technical-frame { min-width: 0; }
 .technical-frame h3 { display: flex; justify-content: space-between; gap: 8px; }
 .rate-block .footnote { overflow-wrap: anywhere; }
+.mtf-panel { min-width: 0; }
+.mtf-summary { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px 16px; margin: 0 0 16px; min-width: 0; }
+.mtf-summary dt { color: var(--muted); font-size: 11px; }
+.mtf-summary dd { margin: 2px 0 0; overflow-wrap: anywhere; }
+.mtf-frames { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; min-width: 0; }
+.mtf-frame { min-width: 0; border: 1px solid var(--border); border-radius: 10px; padding: 12px; background: #0d1623; }
+.mtf-frame h3 { display: flex; justify-content: space-between; gap: 8px; margin: 0 0 6px; font-size: 14px; overflow-wrap: anywhere; }
+.mtf-frame details { margin-top: 8px; }
+.mtf-conflicts { margin-top: 16px; min-width: 0; }
+.mtf-conflicts p { margin: 0 0 6px; font-size: 13px; }
+.mtf-conflicts ul { margin: 0; padding-left: 1.2em; font-size: 13px; line-height: 1.6; overflow-wrap: anywhere; }
+@media (min-width: 800px) {
+  .mtf-summary { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .mtf-frames { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
 @media (max-width: 800px) { .technical-grid { grid-template-columns: 1fr; } }
 @media (max-width: 540px) { .market-panel { grid-template-columns: 1fr; } .rate-block { border-left: 0; border-top: 1px solid var(--border); padding: 16px 0 0; } }
 

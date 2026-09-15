@@ -1,9 +1,18 @@
 import "server-only";
 import { calculateIndicators } from "./indicators";
-import { timeframes, type Candle, type MarketData, type Resource, type Symbol, type Technical, type Timeframe } from "./types";
+import {
+  MARKET_FAILURE_TTL_SECONDS,
+  MARKET_PRICE_TTL_SECONDS,
+  MARKET_SERIES_TTL_SECONDS,
+  type Candle,
+  type MarketData,
+  type Resource,
+  type Symbol,
+  type Technical,
+} from "./types";
 
-const intervals = { "15m": "15min", "1h": "1h", "4h": "4h" };
-const durations = { "15m": 900000, "1h": 3600000, "4h": 14400000 };
+const intervals = { "15m": "15min", "1h": "1h", "4h": "4h", "1day": "1day" } as const;
+const durations = { "15m": 900000, "1h": 3600000, "4h": 14400000, "1day": 86_400_000 } as const;
 // Single-process MVP guard. A distributed deployment needs a shared limiter/cache.
 const cache = new Map<string, { value: Resource<unknown>; expires: number }>();
 const pending = new Map<string, Promise<Resource<unknown>>>();
@@ -49,7 +58,7 @@ async function resource<T>(id: string, endpoint: string, params: Record<string, 
       const safeMessages = ["API利用上限", "Twelve Data", "APIキー", "市場データ"];
       const message = error instanceof Error && safeMessages.some(prefix => error.message.startsWith(prefix)) ? error.message : "市場データの通信に失敗しました。自動再試行します。";
       const value: Resource<T> = { data: (prior?.value.data as T) ?? null, fetchedAt: prior?.value.fetchedAt ?? null, stale: !!prior?.value.data, error: message };
-      cache.set(id, { value, expires: Date.now() + 60000 });
+      cache.set(id, { value, expires: Date.now() + MARKET_FAILURE_TTL_SECONDS * 1000 });
       return value;
     }
   })();
@@ -57,7 +66,7 @@ async function resource<T>(id: string, endpoint: string, params: Record<string, 
   try { return await task; } finally { pending.delete(id); }
 }
 
-function normalizeSeries(body: Record<string, unknown>, frame: Timeframe): Technical {
+function normalizeSeries(body: Record<string, unknown>, durationMs: number): Technical {
   if (!Array.isArray(body.values) || !body.values.length) throw new Error("市場データのOHLCが空です。");
   const candles: Candle[] = body.values.map(value => {
     const time = new Date(String(value.datetime).replace(" ", "T") + "Z");
@@ -66,15 +75,28 @@ function normalizeSeries(body: Record<string, unknown>, frame: Timeframe): Techn
     if (candle.high < Math.max(candle.open, candle.close, candle.low) || candle.low > Math.min(candle.open, candle.close)) throw new Error("市場データのOHLCが不正です。");
     return candle;
   }).sort((a, b) => a.time.localeCompare(b.time));
-  const closed = [...new Map(candles.map(c => [c.time, c])).values()].filter(c => Date.parse(c.time) + durations[frame] <= Date.now());
+  const closed = [...new Map(candles.map(c => [c.time, c])).values()].filter(c => Date.parse(c.time) + durationMs <= Date.now());
   if (!closed.length) throw new Error("市場データの確定足がありません。");
   return { candles: closed, indicators: calculateIndicators(closed), lastClosedAt: closed.at(-1)?.time ?? null };
 }
 
+function series(symbol: Symbol, frame: keyof typeof intervals) {
+  return resource(
+    `${symbol}:${frame}`,
+    "time_series",
+    { symbol, interval: intervals[frame], outputsize: "300", timezone: "UTC", order: "asc" },
+    MARKET_SERIES_TTL_SECONDS,
+    body => normalizeSeries(body, durations[frame]),
+  );
+}
+
 export async function getMarketData(symbol: Symbol): Promise<MarketData> {
-  const [price, ...series] = await Promise.all([
-    resource(`${symbol}:price`, "price", { symbol }, 60, body => number(body.price)),
-    ...timeframes.map(frame => resource(`${symbol}:${frame}`, "time_series", { symbol, interval: intervals[frame], outputsize: "300", timezone: "UTC", order: "asc" }, 300, body => normalizeSeries(body, frame))),
+  const [price, m15, h1, h4, daily] = await Promise.all([
+    resource(`${symbol}:price`, "price", { symbol }, MARKET_PRICE_TTL_SECONDS, body => number(body.price)),
+    series(symbol, "15m"),
+    series(symbol, "1h"),
+    series(symbol, "4h"),
+    series(symbol, "1day"),
   ]);
-  return { symbol, price, timeframes: Object.fromEntries(timeframes.map((frame, i) => [frame, series[i]])) as Record<Timeframe, Resource<Technical>> };
+  return { symbol, price, timeframes: { "15m": m15, "1h": h1, "4h": h4 }, daily };
 }

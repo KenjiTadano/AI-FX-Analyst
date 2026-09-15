@@ -6,7 +6,7 @@ import { analysisFixture, type AnalysisFixtureName } from "../fixtures/analysis"
 import { e2eAuthCookie, e2eAuthCookieName, e2eAuthCookieValue, e2eSession, e2eUser } from "../fixtures/auth";
 import { fundamentalFixture, type CalendarFixtureName } from "../fixtures/fundamental";
 import { E2E_USER_ID } from "../fixtures/ids";
-import { marketFixture } from "../fixtures/market";
+import { marketFixture, type MtfFixtureName } from "../fixtures/market";
 import { performanceTrades, preTradeFullContextTrades, preTradePerformanceTrades, postTradeReviewTrades, settingsRow, tradeRows } from "../fixtures/trades";
 
 const BLOCKED = [
@@ -30,6 +30,8 @@ export type DashboardScenario = {
   candleClose?: number;
   marketStale?: boolean;
   omitCandles?: boolean;
+  mtf?: MtfFixtureName;
+  mtfByPair?: Partial<Record<Symbol, MtfFixtureName>>;
 };
 
 function cors(request: Request): Record<string, string> {
@@ -149,6 +151,7 @@ export async function installDashboardMocks(page: Page, scenario: DashboardScena
         candleClose: live.candleClose,
         stale: live.marketStale,
         omitCandles: live.omitCandles,
+        mtf: live.mtfByPair?.[symbol] ?? live.mtf,
       })),
     });
   });

@@ -1,4 +1,5 @@
 import type { Symbol, Timeframe } from "../market/types";
+import type { MultiTimeframeAnalysis } from "../market/multi-timeframe";
 import type { EconomicEvent, FundamentalData } from "../fundamental/types";
 import type { ChartImageAnalysis } from "../chart-analysis/types";
 import type { StructuredEntryTrigger } from "./entry-trigger";
@@ -59,6 +60,8 @@ export interface AnalysisInput {
   timestamp: string;
   eventRisk: { imminent: boolean; uncertainTime: boolean; nextRiskAt: string | null; reasons: string[]; events?: EconomicEvent[]; known?: boolean; nextBoundaryAt?: string | null };
   chartImageAnalysis?: ChartImageAnalysis;
+  /** Task026 optional deterministic market evidence. Never a trade Action. */
+  multiTimeframeAnalysis?: MultiTimeframeAnalysis;
 }
 export interface TradeScenario {
   direction: "long" | "short";

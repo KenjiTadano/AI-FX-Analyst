@@ -30,8 +30,23 @@ assert.equal(calc([]).sma20, null); assert.equal(calc(bars.slice(0,14)).rsi14, n
   };
   const client = load('lib/market/client.ts', {TWELVE_DATA_API_KEY:'test-only'}, fetch);
   const [a,b] = await Promise.all([client.getMarketData('USD/JPY'), client.getMarketData('USD/JPY')]);
-  assert.equal(count,4); assert.equal(a.price.data,150.125); assert.equal(b.timeframes['4h'].data.indicators.sma200,199.5);
-  await client.getMarketData('USD/JPY'); assert.equal(count,4);
+  assert.equal(count,5); assert.equal(a.price.data,150.125); assert.equal(b.timeframes['4h'].data.indicators.sma200,199.5);
+  assert.equal(a.daily.error, null); assert.ok(a.daily.data);
+  await client.getMarketData('USD/JPY'); assert.equal(count,5);
+  let isolatedCount = 0;
+  const isolatedFetch = async (url, options) => {
+    isolatedCount++;
+    assert.equal(options.headers.Authorization, 'apikey test-only');
+    const interval = new URL(url).searchParams.get('interval');
+    if (interval === '1day') return {ok: true, status:200, json: async () => ({status:'error',code:429,message:'secret upstream'})};
+    return {ok:true, status:200, json:async () => url.pathname === '/price' ? {price:'150.125'} : {values: [...bars].reverse().map(c => ({...c, datetime:c.time.slice(0,19).replace('T',' ')}))}};
+  };
+  const isolated = await load('lib/market/client.ts', {TWELVE_DATA_API_KEY:'test-only'}, isolatedFetch).getMarketData('USD/JPY');
+  assert.equal(isolatedCount, 5);
+  assert.ok(isolated.timeframes['15m'].data);
+  assert.ok(isolated.timeframes['4h'].data);
+  assert.equal(isolated.daily.data, null);
+  assert.match(isolated.daily.error, /利用上限/);
   now += 61000; fail = true;
   const stale = await client.getMarketData('USD/JPY'); assert.equal(stale.price.stale,true); assert.equal(stale.price.data,150.125); assert.match(stale.price.error,/利用上限/);
   assert.equal(stale.timeframes['1h'].error,null);

@@ -3,6 +3,7 @@ import { surprise } from "../economic-calendar/normalize";
 import { canAttachToPairAnalysis } from "../chart-analysis/normalize";
 import type { ChartImageAnalysis } from "../chart-analysis/types";
 import { FRED_SERIES_COUNT } from "../fundamental/fred-series";
+import { mtfEvidencePayload, multiTimeframeForPair, sanitizeMultiTimeframeAnalysis } from "../market/multi-timeframe";
 import type { MarketData, Symbol } from "../market/types";
 import type { DataResource, EconomicIndicatorValue, FundamentalData } from "../fundamental/types";
 import { currentRate, evaluateTechnical, fresh } from "./technical";
@@ -89,6 +90,17 @@ export function buildInput(pair: Symbol, market: MarketData | null, fundamentals
       evidence.push({ id: `sentiment:${item.id}`, categories: ["market_environment"], title: item.id, source: item.observation.source ?? "sentiment provider", observedAt: item.observation.asOf, data: { subject: item.id, value: item.observation.value } });
     }
   }
+  const mtf = sanitizeMultiTimeframeAnalysis(multiTimeframeForPair(market, pair, new Date(now).toISOString()), pair);
+  if (mtf) {
+    evidence.push({
+      id: "technical:mtf",
+      categories: ["technical"],
+      source: "Twelve Data",
+      title: "マルチタイムフレーム市場構造",
+      observedAt: mtf.analyzedAt,
+      data: mtfEvidencePayload(mtf),
+    });
+  }
   const attachedChart = canAttachToPairAnalysis(chartImageAnalysis, pair) ? chartImageAnalysis : undefined;
   if (attachedChart) {
     evidence.push({
@@ -139,5 +151,5 @@ export function buildInput(pair: Symbol, market: MarketData | null, fundamentals
     macroeconomicData: macroQuality,
   };
   const eventRisk: AnalysisInput["eventRisk"] = { ...riskState(events, now), events, known: calendarFresh };
-  return { pair, currentRate: rate, technicalAnalysis, fundamentalData: evidence, dataAvailability, timestamp: new Date(now).toISOString(), eventRisk, ...(attachedChart ? { chartImageAnalysis: attachedChart } : {}) };
+  return { pair, currentRate: rate, technicalAnalysis, fundamentalData: evidence, dataAvailability, timestamp: new Date(now).toISOString(), eventRisk, ...(attachedChart ? { chartImageAnalysis: attachedChart } : {}), ...(mtf ? { multiTimeframeAnalysis: mtf } : {}) };
 }
