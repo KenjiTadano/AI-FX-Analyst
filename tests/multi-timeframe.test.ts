@@ -34,8 +34,6 @@ const SOURCE = [
   readFileSync(join(process.cwd(), "components/dashboard/multi-timeframe.tsx"), "utf8"),
 ].join("\n");
 const CLIENT = readFileSync(join(process.cwd(), "lib/market/client.ts"), "utf8");
-const SNAPSHOT = readFileSync(join(process.cwd(), "lib/trades/snapshot.ts"), "utf8");
-const TYPES = readFileSync(join(process.cwd(), "lib/trades/types.ts"), "utf8");
 const FORBIDDEN = /エントリー|チャンス|おすすめ|Entry OK|GO\b|goodEntry|badEntry/;
 
 function resource<T>(data: T): Resource<T> {
@@ -533,9 +531,10 @@ test("BI request budget deterministic", () => {
   assert.equal(timeframes.length, 3);
 });
 
-test("BJ no snapshot schema change", () => {
-  assert.doesNotMatch(SNAPSHOT, /multiTimeframe|mtfTimeframe/);
-  assert.doesNotMatch(TYPES, /multiTimeframeAnalysis/);
+test("BJ live MTF does not persist itself", () => {
+  const mtfSource = readFileSync(join(process.cwd(), "lib/market/multi-timeframe.ts"), "utf8");
+  assert.doesNotMatch(mtfSource, /from ["']\.\.\/trades/);
+  assert.doesNotMatch(mtfSource, /captureTradeAiSnapshot|createTrade/);
 });
 
 test("critical: HTF bullish lower bearish is mixed without Action", () => {

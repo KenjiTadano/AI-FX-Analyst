@@ -3,8 +3,11 @@ import { useState, type FormEvent } from "react";
 import type { AIAnalysis } from "@/lib/ai/types";
 import type { ChartImageAnalysis } from "@/lib/chart-analysis/types";
 import { actionGuidanceLabel, directionBiasLabel, signalLabels as decisionSignalLabels } from "@/lib/ai/decision-ui";
+import { ALIGNMENT_LABEL, TREND_LABEL } from "@/lib/market/multi-timeframe";
+import type { MarketData } from "@/lib/market/types";
 import { pairs, type Trade, type TradeDraft } from "@/lib/trades/types";
 import { isRichSnapshot } from "@/lib/trades/snapshot";
+import { captureMultiTimeframeSnapshot } from "@/lib/trades/mtf-snapshot";
 import { buildPreTradeReview } from "@/lib/trades/pre-trade-review";
 import type { DailyTradingPlan } from "@/lib/trading-plan/daily-plan";
 import type { EntryReadiness } from "@/lib/trading-plan/entry-readiness";
@@ -18,12 +21,13 @@ interface Props {
   rate: number | null;
   analysis: AIAnalysis | null;
   chartImageAnalysis?: ChartImageAnalysis | null;
+  market?: MarketData | null;
   getPreTradeSource?: () => { plan: DailyTradingPlan; readiness: EntryReadiness } | null;
   onSave: (draft: TradeDraft, options?: { saveSnapshot?: boolean }) => Promise<string | null>;
   onCancel: () => void;
 }
 
-export function TradeForm({ trade, mode, pair, rate, analysis, chartImageAnalysis = null, getPreTradeSource, onSave, onCancel }: Props) {
+export function TradeForm({ trade, mode, pair, rate, analysis, chartImageAnalysis = null, market = null, getPreTradeSource, onSave, onCancel }: Props) {
   const [fields, setFields] = useState(() => ({
     pair: trade?.pair ?? pair,
     side: trade?.side ?? (analysis?.signal.includes("sell") ? "short" : "long"),
@@ -76,6 +80,9 @@ export function TradeForm({ trade, mode, pair, rate, analysis, chartImageAnalysi
       ? `${chartImageAnalysis.detected.timeframe ?? "時間足未検出"} / ${chartImageAnalysis.trend.direction} / 未添付`
       : "なし";
   const source = mode === "new" ? getPreTradeSource?.() ?? null : null;
+  const mtfPreview = mode === "new" && saveSnapshot
+    ? captureMultiTimeframeSnapshot(market, fields.pair, market?.daily?.fetchedAt ?? market?.price.fetchedAt ?? new Date().toISOString())
+    : null;
   const review = mode === "new"
     ? buildPreTradeReview({
       pair: fields.pair,
@@ -106,6 +113,7 @@ export function TradeForm({ trade, mode, pair, rate, analysis, chartImageAnalysi
           <p>判断：{decisionSignalLabels[live.signal]} · 方向：{directionBiasLabel(direction)} · Action：{actionGuidanceLabel(action, live.signal)}</p>
           <p>確信度：{live.confidence}% · 分析時刻：{dateTime(live.analyzedAt)}</p>
           <p>Chart：{chartPreview}</p>
+          {mtfPreview && <p data-testid="mtf-snapshot-preview">市場構造：{TREND_LABEL[mtfPreview.higherTimeframeBias]} · {ALIGNMENT_LABEL[mtfPreview.alignment]}</p>}
           {live.ai.status !== "available" && <p className="neutral">AI一部利用不可時の暫定分析です。</p>}
         </div>}
       </> : <p className="footnote">AI分析なし。スナップショットなしで記録できます。</p>}

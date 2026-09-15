@@ -1,5 +1,6 @@
 import type { AIAnalysis } from "../ai/types";
 import type { ChartImageAnalysis } from "../chart-analysis/types";
+import type { MarketData } from "../market/types";
 import type { DailyTradingPlan } from "../trading-plan/daily-plan";
 import type { EntryReadiness } from "../trading-plan/entry-readiness";
 import { buildEntryTriggerWatch } from "../trading-plan/entry-trigger-watch";
@@ -14,6 +15,7 @@ export type CreateTradeOptions = {
   saveSnapshot?: boolean;
   dailyPlan?: DailyTradingPlan | null;
   readiness?: EntryReadiness | null;
+  market?: MarketData | null;
 };
 
 /** @deprecated Prefer createTrade options; kept for existing tests. */
@@ -53,6 +55,7 @@ export function createTrade(draft: TradeDraft, analysis: AIAnalysis | null, id: 
       dailyPlan: options?.dailyPlan ?? null,
       readiness: options?.readiness ?? null,
       distanceToTriggerPips: distanceFromReadiness(draft.pair, options?.readiness),
+      market: options?.market ?? null,
     }),
   });
 }

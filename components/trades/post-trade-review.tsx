@@ -9,6 +9,7 @@ import {
 } from "@/lib/trades/post-trade-review";
 import type { Trade } from "@/lib/trades/types";
 import { PreTradeContextDetail } from "./pre-trade-context";
+import { MtfSnapshotDetail } from "./mtf-snapshot";
 import { money, tone } from "./format";
 
 function row(label: string, value: string, testId: string, valueClass?: string) {
@@ -42,6 +43,7 @@ export function PostTradeReview({ trade }: { trade: Trade }) {
       {review.context ? <PreTradeContextDetail trade={trade} /> : (
         <p className="footnote" data-testid={review.contextState === "unreadable" ? "post-trade-review-unreadable" : "pretrade-missing"}>{missing}</p>
       )}
+      <MtfSnapshotDetail trade={trade} />
       {review.contextLabels.length > 0 && (
         <div className="posttrade-review-labels">
           <p>この取引のContext</p>

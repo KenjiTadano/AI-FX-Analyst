@@ -71,7 +71,7 @@ function resolveAnalysis(
 
 export async function installDashboardMocks(page: Page, scenario: DashboardScenario = {}): Promise<{
   leaks: string[];
-  setMarket: (opts: { price?: number; candleClose?: number; stale?: boolean; omitCandles?: boolean }) => void;
+  setMarket: (opts: { price?: number; candleClose?: number; stale?: boolean; omitCandles?: boolean; mtf?: MtfFixtureName }) => void;
   setAnalysis: (name: AnalysisFixtureName | "unavailable") => void;
 }> {
   const now = Date.now();
@@ -247,6 +247,7 @@ export async function installDashboardMocks(page: Page, scenario: DashboardScena
       if (opts.candleClose !== undefined) live.candleClose = opts.candleClose;
       if (opts.stale !== undefined) live.marketStale = opts.stale;
       if (opts.omitCandles !== undefined) live.omitCandles = opts.omitCandles;
+      if (opts.mtf !== undefined) live.mtf = opts.mtf;
     },
     setAnalysis(name) {
       live.analysis = name;
