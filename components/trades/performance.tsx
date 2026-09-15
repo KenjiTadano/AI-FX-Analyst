@@ -51,6 +51,7 @@ export function Performance({ trades, initialBalance }: { trades: Trade[]; initi
             type="button"
             aria-pressed={period === option.id}
             className={period === option.id ? "period-tab active" : "period-tab"}
+            data-testid={`performance-period-${option.id}`}
             onClick={() => { setPeriod(option.id); setDay(null); }}
           >
             {option.label}

@@ -111,7 +111,7 @@ export function DailyTradingPlanPanel({
   }
 
   return (
-    <Panel title="今日のトレード計画" eyebrow="DAILY TRADING PLAN" className="daily-plan-panel">
+    <Panel title="今日のトレード計画" eyebrow="DAILY TRADING PLAN" className="daily-plan-panel" testId="daily-plan">
       <div className="daily-plan-header">
         <div>
           <p className="muted daily-plan-pair" data-testid="daily-plan-pair">{plan.pair}</p>
@@ -199,7 +199,7 @@ export function DailyTradingPlanPanel({
           <p className="footnote">{plan.todayScopeLabel}</p>
           <dl className="metrics">
             <div><dt>今日の取引</dt><dd data-testid="daily-plan-today-count">{plan.todayTradeCount}件</dd></div>
-            <div><dt>決済済み</dt><dd>{plan.todayClosedCount}件</dd></div>
+            <div><dt>決済済み</dt><dd data-testid="daily-plan-today-closed">{plan.todayClosedCount}件</dd></div>
             <div><dt>本日確定損益</dt><dd className={plan.todayRealizedPnl > 0 ? "positive" : plan.todayRealizedPnl < 0 ? "negative" : ""} data-testid="daily-plan-today-pnl">{signedMoney(plan.todayRealizedPnl)}</dd></div>
             <div><dt>選択ペア</dt><dd>{plan.todayPairTradeCount}件</dd></div>
           </dl>

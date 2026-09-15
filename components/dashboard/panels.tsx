@@ -2,8 +2,8 @@ import type { ReactNode } from "react";
 import { calculateRisk, signalLabels, signalTone, yen } from "@/lib/analysis";
 import { signals, type Account, type FxAnalysis } from "@/types/analysis";
 
-export function Panel({ title, eyebrow, children, className = "" }: { title: string; eyebrow: string; children: ReactNode; className?: string }) {
-  return <section className={`panel ${className}`}><div className="section-heading"><span className="eyebrow">{eyebrow}</span><h2>{title}</h2></div>{children}</section>;
+export function Panel({ title, eyebrow, children, className = "", testId }: { title: string; eyebrow: string; children: ReactNode; className?: string; testId?: string }) {
+  return <section className={`panel ${className}`} data-testid={testId}><div className="section-heading"><span className="eyebrow">{eyebrow}</span><h2>{title}</h2></div>{children}</section>;
 }
 
 export function SignalPanel({ analysis }: { analysis: FxAnalysis }) {
