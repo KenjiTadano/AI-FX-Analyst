@@ -6,7 +6,7 @@ import { getBrowserSupabase } from "@/lib/supabase/client";
 import { createSettingsRepository } from "@/lib/supabase/cloud-repository";
 import { validateSettings } from "@/lib/supabase/mappers";
 import { RiskManagement } from "../dashboard/risk-management";
-export function CloudSettings({ userId, analysis, pair, currentRate, onBalanceChange }: { userId: string; analysis: AIAnalysis | null; pair: string; currentRate: number | null; onBalanceChange: (balance: number) => void }) {
+export function CloudSettings({ userId, analysis, pair, currentRate, onBalanceChange, onSettingsChange }: { userId: string; analysis: AIAnalysis | null; pair: string; currentRate: number | null; onBalanceChange: (balance: number) => void; onSettingsChange?: (settings: RiskSettings) => void }) {
   const repository = useMemo(() => { const client = getBrowserSupabase(); return client ? createSettingsRepository(client, userId) : null; }, [userId]);
   const [initial, setInitial] = useState<RiskSettings | null>(null);
   const [draft, setDraft] = useState<RiskSettings | null>(null);
@@ -17,11 +17,12 @@ export function CloudSettings({ userId, analysis, pair, currentRate, onBalanceCh
   const alive = useRef(true);
   useEffect(() => {
     alive.current = true;
-    void repository?.load().then(result => { if (alive.current) { setInitial(result.data); setError(result.error); setStatus(result.data ? "クラウドから取得済み" : "未取得"); if (result.data) onBalanceChange(result.data.balance); } });
+    void repository?.load().then(result => { if (alive.current) { setInitial(result.data); setError(result.error); setStatus(result.data ? "クラウドから取得済み" : "未取得"); if (result.data) { onBalanceChange(result.data.balance); onSettingsChange?.(result.data); } } });
     return () => { alive.current = false; if (timer.current) clearTimeout(timer.current); };
-  }, [repository, onBalanceChange]);
+  }, [repository, onBalanceChange, onSettingsChange]);
   function change(settings: RiskSettings) {
     setDraft(settings); setStatus("未保存"); setError(null);
+    onSettingsChange?.(settings);
     if (timer.current) clearTimeout(timer.current);
     try { validateSettings(settings); } catch { setError("設定が入力範囲外のため未保存です。リスク率は10%以下にしてください。"); return; }
     timer.current = setTimeout(async () => {

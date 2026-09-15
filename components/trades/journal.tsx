@@ -11,7 +11,7 @@ import { TradeForm } from "./trade-form";
 import { TradeList } from "./trade-list";
 import { Performance } from "./performance";
 import { Panel } from "../dashboard/panels";
-export function TradeJournal({ userId, view, pair, quote, analysis, chartImageAnalysis = null, initialBalance }: { userId: string; view: "analysis" | "trades" | "performance"; pair: string; quote: Quote | null; analysis: AIAnalysis | null; chartImageAnalysis?: ChartImageAnalysis | null; initialBalance: number }) {
+export function TradeJournal({ userId, view, pair, quote, analysis, chartImageAnalysis = null, initialBalance, onTradesChange }: { userId: string; view: "analysis" | "trades" | "performance"; pair: string; quote: Quote | null; analysis: AIAnalysis | null; chartImageAnalysis?: ChartImageAnalysis | null; initialBalance: number; onTradesChange?: (trades: Trade[]) => void }) {
   const repository = useMemo(() => { const client = getBrowserSupabase(); return client ? createCloudRepository(client, userId) : null; }, [userId]);
   const [journal, setJournal] = useState<CloudJournal | null>(null);
   const [local, setLocal] = useState<Trade[]>([]);
@@ -32,6 +32,7 @@ export function TradeJournal({ userId, view, pair, quote, analysis, chartImageAn
     const clock = setInterval(() => setNow(Date.now()), 1000);
     return () => { active = false; clearInterval(clock); };
   }, [repository]);
+  useEffect(() => { onTradesChange?.(journal?.trades ?? []); }, [journal, onTradesChange]);
   async function save(draft: TradeDraft, options?: { saveSnapshot?: boolean }): Promise<string | null> {
     if (!editor || !journal || !repository || busy) return "読み込み完了後に記録してください。";
     const at = new Date().toISOString();
