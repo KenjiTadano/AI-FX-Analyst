@@ -7,7 +7,7 @@ import {
   type ReadinessCheck,
 } from "@/lib/trading-plan/entry-readiness";
 import { CONFIDENCE_DISCLAIMER } from "@/lib/trading-plan/daily-plan";
-import { STATUS_TEXT, TRIGGER_MET_LABEL } from "@/lib/ai/entry-trigger";
+import { EntryTriggerWatchCard } from "./entry-trigger-watch";
 import { Panel } from "./panels";
 
 const mark = (status: ReadinessCheck["status"]) => {
@@ -36,10 +36,14 @@ export function EntryReadinessPanel({
   readiness,
   onRefresh,
   refreshing = false,
+  analyzedAt = null,
+  rateDecimals = 3,
 }: {
   readiness: EntryReadiness;
   onRefresh?: () => void;
   refreshing?: boolean;
+  analyzedAt?: string | null;
+  rateDecimals?: number;
 }) {
   const showRefresh = (readiness.stale || readiness.state === "unavailable") && !!onRefresh;
   return (
@@ -88,40 +92,7 @@ export function EntryReadinessPanel({
         <p className="footnote" data-testid="entry-readiness-condition-note">{readiness.entryCondition.note}</p>
       </section>
 
-      {readiness.triggerEvaluation && (
-        <section className="entry-readiness-card entry-trigger-card" aria-label="ENTRY TRIGGER" data-testid="entry-trigger">
-          <h3>ENTRY TRIGGER</h3>
-          <p className="footnote">{readiness.triggerSourceLabel}</p>
-          {readiness.entryTrigger ? (
-            <>
-              <p data-testid="entry-trigger-human">{readiness.triggerEvaluation.humanLabel}</p>
-              <p className="entry-trigger-expression" data-testid="entry-trigger-expression">{readiness.triggerEvaluation.expression}</p>
-              {readiness.entryTrigger.timeframe && (
-                <p className="footnote" data-testid="entry-trigger-timeframe">{readiness.triggerEvaluation.humanLabel}</p>
-              )}
-              <dl className="metrics">
-                <div>
-                  <dt>{readiness.triggerEvaluation.observedLabel}</dt>
-                  <dd data-testid="entry-trigger-observed">{readiness.triggerEvaluation.observedValue == null ? "—" : readiness.triggerEvaluation.observedValue}</dd>
-                </div>
-                <div>
-                  <dt>判定時刻</dt>
-                  <dd data-testid="entry-trigger-checked-at">{new Date(readiness.triggerEvaluation.checkedAt).toLocaleString("ja-JP", { hour12: false })}</dd>
-                </div>
-              </dl>
-            </>
-          ) : (
-            <p data-testid="entry-trigger-invalid">{readiness.triggerEvaluation.reason}</p>
-          )}
-          <p data-testid="entry-trigger-status">
-            <span className="entry-readiness-status-label">{STATUS_TEXT[readiness.triggerEvaluation.status]}</span>
-            {" "}
-            {readiness.triggerEvaluation.status === "met" ? TRIGGER_MET_LABEL : readiness.triggerEvaluation.reason}
-          </p>
-          {readiness.triggerStaleNote && <p className="footnote" data-testid="entry-trigger-stale">{readiness.triggerStaleNote}</p>}
-          <p className="footnote" data-testid="entry-trigger-disclaimer">{readiness.triggerDisclaimer}</p>
-        </section>
-      )}
+      <EntryTriggerWatchCard readiness={readiness} analyzedAt={analyzedAt} rateDecimals={rateDecimals} />
 
       {readiness.confidence != null && (
         <p className="footnote" data-testid="entry-readiness-confidence">参考: Confidence {readiness.confidence}（勝率ではありません）</p>

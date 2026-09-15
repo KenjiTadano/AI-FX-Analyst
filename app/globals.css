@@ -407,12 +407,19 @@ h2 { font-size: 17px; font-weight: 600; margin-top: 4px; }
 .entry-readiness-card { min-width: 0; border: 1px solid var(--border); border-radius: 10px; padding: 16px; background: #0d1623; }
 .entry-readiness-card h3 { margin: 0 0 10px; font-size: 13px; }
 .entry-readiness-card p { overflow-wrap: anywhere; }
-.entry-trigger-card { margin-top: 14px; }
+.entry-trigger-card { margin-top: 14px; min-width: 0; }
 .entry-trigger-expression { margin: 6px 0; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 14px; overflow-wrap: anywhere; }
+.entry-trigger-watch { min-width: 0; }
+.entry-trigger-watch-hero { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px 12px; margin: 8px 0 12px; min-width: 0; }
+.entry-trigger-watch-hero div { min-width: 0; }
+.entry-trigger-watch-hero dt { color: var(--muted); font-size: 12px; }
+.entry-trigger-watch-hero dd { margin: 2px 0 0; font-size: 20px; font-weight: 700; overflow-wrap: anywhere; }
+.entry-trigger-watch-notice { margin: 8px 0 0; padding: 8px 10px; border-radius: 8px; border: 1px solid #3a4d66; background: #152234; overflow-wrap: anywhere; }
 @media (min-width: 1000px) {
   .dashboard-grid.decision-layout > .entry-readiness-panel { grid-column: 1 / -1; }
 }
 @media (max-width: 540px) {
   .entry-readiness-hero { padding: 14px; }
   .entry-readiness-check { grid-template-columns: 22px minmax(0, 1fr); padding: 10px; }
+  .entry-trigger-watch-hero { grid-template-columns: minmax(0, 1fr); }
 }

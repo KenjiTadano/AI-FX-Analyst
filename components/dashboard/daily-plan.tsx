@@ -232,7 +232,7 @@ export function DailyTradingPlanPanel({
       <p className="footnote" data-testid="daily-plan-confidence-disclaimer">{CONFIDENCE_DISCLAIMER}</p>
       <p className="footnote" data-testid="daily-plan-no-auto">{NO_AUTO_TRADING_COPY}</p>
     </Panel>
-    <EntryReadinessPanel readiness={readiness} onRefresh={onRefresh} refreshing={refreshing} />
+    <EntryReadinessPanel readiness={readiness} onRefresh={onRefresh} refreshing={refreshing} analyzedAt={analysis?.analyzedAt ?? null} rateDecimals={rateDecimals} />
     </>
   );
 }

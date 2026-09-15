@@ -66,7 +66,11 @@ function resolveAnalysis(
   return analysisFixture(named, now, pair as Symbol);
 }
 
-export async function installDashboardMocks(page: Page, scenario: DashboardScenario = {}): Promise<{ leaks: string[] }> {
+export async function installDashboardMocks(page: Page, scenario: DashboardScenario = {}): Promise<{
+  leaks: string[];
+  setMarket: (opts: { price?: number; candleClose?: number; stale?: boolean; omitCandles?: boolean }) => void;
+  setAnalysis: (name: AnalysisFixtureName | "unavailable") => void;
+}> {
   const now = Date.now();
   const trades = scenario.includeTrades === false ? [] : performanceTrades(now);
   const rows = tradeRows(trades);
@@ -74,6 +78,7 @@ export async function installDashboardMocks(page: Page, scenario: DashboardScena
   const session = e2eSession();
   const origin = e2eOrigin();
   const context = page.context();
+  const live: DashboardScenario = { ...scenario, analyses: { ...scenario.analyses } };
 
   await context.addCookies([e2eAuthCookie(origin)]);
 
@@ -115,7 +120,7 @@ export async function installDashboardMocks(page: Page, scenario: DashboardScena
 
   await context.route(/\/api\/analysis(?:\?|$)/, async route => {
     const pair = pairFromAnalysisRequest(route.request());
-    const data = resolveAnalysis(pair, scenario, now);
+    const data = resolveAnalysis(pair, live, now);
     await route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -131,17 +136,17 @@ export async function installDashboardMocks(page: Page, scenario: DashboardScena
       status: 200,
       contentType: "application/json",
       body: JSON.stringify(marketFixture(symbol, now, {
-        price: scenario.marketPrice,
-        candleClose: scenario.candleClose,
-        stale: scenario.marketStale,
-        omitCandles: scenario.omitCandles,
+        price: live.marketPrice,
+        candleClose: live.candleClose,
+        stale: live.marketStale,
+        omitCandles: live.omitCandles,
       })),
     });
   });
 
   await context.route(/\/api\/fundamental(?:\?|$)/, async route => {
     const symbol = (new URL(route.request().url()).searchParams.get("symbol") ?? "USD/JPY") as Symbol;
-    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(fundamentalFixture(symbol, now, scenario.calendar)) });
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(fundamentalFixture(symbol, now, live.calendar)) });
   });
 
   await context.route(/\/api\/chart-analysis(?:\?|$)/, async route => {
@@ -194,7 +199,18 @@ export async function installDashboardMocks(page: Page, scenario: DashboardScena
     await route.abort("blockedbyclient");
   });
 
-  return { leaks };
+  return {
+    leaks,
+    setMarket(opts) {
+      if (opts.price !== undefined) live.marketPrice = opts.price;
+      if (opts.candleClose !== undefined) live.candleClose = opts.candleClose;
+      if (opts.stale !== undefined) live.marketStale = opts.stale;
+      if (opts.omitCandles !== undefined) live.omitCandles = opts.omitCandles;
+    },
+    setAnalysis(name) {
+      live.analysis = name;
+    },
+  };
 }
 
 export async function assertNoOverflow(page: Page) {
@@ -209,4 +225,8 @@ export async function assertNoOverflow(page: Page) {
 
 export function pairSelect(page: Page) {
   return page.locator("#currency-pair");
+}
+
+export async function advanceExistingRefresh(page: Page) {
+  await page.clock.fastForward(61_000);
 }
