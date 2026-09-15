@@ -353,6 +353,12 @@ h2 { font-size: 17px; font-weight: 600; margin-top: 4px; }
 .pretrade-grid div { display: grid; grid-template-columns: 7.5rem minmax(0, 1fr); gap: 8px; min-width: 0; }
 .pretrade-grid dt { color: var(--muted); }
 .pretrade-grid dd { margin: 0; overflow-wrap: anywhere; }
+.pretrade-perf-panel, .pretrade-perf-section, .pretrade-perf-coverage { min-width: 0; }
+.pretrade-perf-section { margin-top: 16px; }
+.pretrade-perf-section h3 { font-size: 14px; margin: 0 0 8px; overflow-wrap: anywhere; }
+.pretrade-perf-coverage p, .pretrade-perf-comparisons { overflow-wrap: anywhere; }
+.pretrade-perf-comparisons { margin: 16px 0 0; padding-left: 1.2em; font-size: 13px; line-height: 1.7; color: var(--muted); }
+.pretrade-perf-cards small { display: block; margin-top: 6px; }
 
 /* Task017 Daily Trading Plan */
 .daily-plan-panel { grid-column: 1 / -1; }

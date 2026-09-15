@@ -9,6 +9,7 @@ import { Panel } from "../dashboard/panels";
 import { AiEntryContextPanel } from "./ai-entry-context";
 import { EntryTimingPanel } from "./entry-timing";
 import { TradingReviewInsights } from "./insights";
+import { PreTradeContextPerformancePanel } from "./pre-trade-performance";
 import { TradeList } from "./trade-list";
 import { money, signalLabels, tone } from "./format";
 
@@ -80,6 +81,7 @@ export function Performance({ trades, initialBalance }: { trades: Trade[]; initi
     ) : (
       <>
         <TradingReviewInsights trades={filteredTrades} periodLabel={label} />
+        <PreTradeContextPerformancePanel trades={filteredTrades} periodLabel={label} />
         <EntryTimingPanel trades={filteredTrades} periodLabel={label} />
         <AiEntryContextPanel trades={filteredTrades} periodLabel={label} />
         <Panel title="損益サマリー" eyebrow="REALIZED RESULTS" className="journal-wide">

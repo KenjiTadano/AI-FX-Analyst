@@ -1,6 +1,6 @@
-import type { TradeAiAnalysisSnapshot, Trade } from "../../lib/trades/types";
+import type { PreTradeContextSnapshot, TradeAiAnalysisSnapshot, Trade } from "../../lib/trades/types";
 import { pnl } from "../../lib/trades/calculations";
-import { E2E_USER_ID, TRADE_IDS, daysAgo, localDayOffset } from "./ids";
+import { E2E_USER_ID, TRADE_IDS, daysAgo, iso, localDayOffset } from "./ids";
 import type { TradeSignal } from "../../lib/ai/types";
 
 function quality() {
@@ -194,6 +194,162 @@ export function performanceTrades(now = Date.now()): Trade[] {
         marketPrice: 156.5,
       }),
     }),
+  ];
+}
+
+function t023Id(n: number): string {
+  return `11111111-1111-4111-8111-111111111${String(300 + n).padStart(3, "0")}`;
+}
+
+export function preTradeSnapshotContext(partial: Partial<PreTradeContextSnapshot> = {}, at = "2026-09-15T03:15:00.000Z"): PreTradeContextSnapshot {
+  return {
+    version: 1,
+    capturedAt: at,
+    pair: "USD/JPY",
+    direction: "SELL",
+    action: "WAIT",
+    readiness: { confirmedCount: 5, totalCount: 5, state: "waiting" },
+    trigger: {
+      structuredTrigger: {
+        version: 1,
+        type: "price_below",
+        pair: "USD/JPY",
+        price: 156.2,
+        timeframe: null,
+        sourceCondition: "現在価格が156.20を下回った場合",
+      },
+      evaluation: { status: "met", observedValue: 156.18, checkedAt: at, distanceToTriggerPips: 0 },
+    },
+    dataQuality: { score: 82 },
+    confidence: 76,
+    eventRisk: { level: "low", available: true },
+    risk: { capital: 50_000, riskPercent: 1, riskPerTrade: 500 },
+    dailyLossLimitPercent: 3,
+    dailyLossRemaining: 1_000,
+    dailyLossLimitReached: false,
+    analysisStale: false,
+    eventRiskHigh: false,
+    ...partial,
+  };
+}
+
+function contextTrade(args: {
+  id: string;
+  openedAt: string;
+  closedAt: string;
+  exitPrice: number;
+  context: PreTradeContextSnapshot;
+  status?: Trade["status"];
+  notes?: string;
+}): Trade {
+  if (args.status === "open") {
+    return {
+      id: args.id,
+      pair: "USD/JPY",
+      side: "short",
+      status: "open",
+      quantity: 1000,
+      entryPrice: 156.5,
+      exitPrice: null,
+      openedAt: args.openedAt,
+      closedAt: null,
+      stopLoss: null,
+      takeProfit: null,
+      notes: args.notes ?? "t023 open",
+      realizedPnl: null,
+      analysisSnapshot: richSnapshot({
+        analyzedAt: args.openedAt,
+        capturedAt: args.openedAt,
+        expiresAt: args.openedAt,
+        action: args.context.action ?? "WAIT",
+        directionSignal: "sell",
+        preTradeContext: args.context,
+      }),
+      createdAt: args.openedAt,
+      updatedAt: args.openedAt,
+    };
+  }
+  return closedTrade({
+    id: args.id,
+    openedAt: args.openedAt,
+    closedAt: args.closedAt,
+    side: "short",
+    entryPrice: 156.5,
+    exitPrice: args.exitPrice,
+    snapshot: richSnapshot({
+      analyzedAt: args.openedAt,
+      capturedAt: args.openedAt,
+      expiresAt: args.openedAt,
+      action: args.context.action ?? "WAIT",
+      directionSignal: "sell",
+      preTradeContext: { ...args.context, capturedAt: args.openedAt, pair: "USD/JPY" },
+    }),
+  });
+}
+
+/** Default journal trades plus Task023 context samples. Coverage is partial. */
+export function preTradePerformanceTrades(now = Date.now()): Trade[] {
+  return [...performanceTrades(now), ...preTradeContextClosedTrades(now), preTradeContextOpenTrade(now)];
+}
+
+/** Closed trades that all have valid preTradeContext (coverage 100%). */
+export function preTradeFullContextTrades(now = Date.now()): Trade[] {
+  return preTradeContextClosedTrades(now);
+}
+
+export function preTradeContextOpenTrade(now = Date.now()): Trade {
+  const today = localDayOffset(0, 11, new Date(now));
+  return contextTrade({
+    id: t023Id(19),
+    openedAt: today,
+    closedAt: today,
+    exitPrice: 156.0,
+    status: "open",
+    context: preTradeSnapshotContext({ action: "WAIT" }, today),
+    notes: "t023-open-context",
+  });
+}
+
+export function preTradeContextClosedTrades(now = Date.now()): Trade[] {
+  const recent = daysAgo(5, now);
+  const month = daysAgo(45, now);
+  const at = iso(now);
+  const met = preTradeSnapshotContext({ action: "WAIT", analysisStale: false }, at);
+  const notMet = preTradeSnapshotContext({
+    action: "WAIT",
+    trigger: {
+      structuredTrigger: met.trigger!.structuredTrigger,
+      evaluation: { status: "not_met", observedValue: 156.2, checkedAt: at, distanceToTriggerPips: 0 },
+    },
+  }, at);
+  const stale = preTradeSnapshotContext({ action: "WAIT", analysisStale: true }, at);
+  const eventUnavailable = preTradeSnapshotContext({
+    action: "WAIT",
+    eventRisk: { level: "unknown", available: false },
+    eventRiskHigh: false,
+  }, at);
+  const dll = preTradeSnapshotContext({ action: "WAIT", dailyLossLimitReached: true, dailyLossRemaining: 0 }, at);
+
+  const recentWins = [1, 2, 3, 4, 5].map(n => contextTrade({
+    id: t023Id(n), openedAt: recent, closedAt: recent, exitPrice: 156.0, context: met, notes: "t023-met",
+  }));
+  const recentLosses = [6, 7, 8, 9, 10].map(n => contextTrade({
+    id: t023Id(n), openedAt: recent, closedAt: recent, exitPrice: 157.0, context: notMet, notes: "t023-not-met",
+  }));
+  const olderWins = [11, 12, 13].map(n => contextTrade({
+    id: t023Id(n), openedAt: month, closedAt: month, exitPrice: 156.0, context: met, notes: "t023-met-90d",
+  }));
+  const olderLosses = [14, 15].map(n => contextTrade({
+    id: t023Id(n), openedAt: month, closedAt: month, exitPrice: 157.0, context: notMet, notes: "t023-not-met-90d",
+  }));
+  return [
+    ...recentWins,
+    ...recentLosses,
+    ...olderWins,
+    ...olderLosses,
+    contextTrade({ id: t023Id(16), openedAt: recent, closedAt: recent, exitPrice: 156.0, context: stale, notes: "t023-stale" }),
+    contextTrade({ id: t023Id(17), openedAt: recent, closedAt: recent, exitPrice: 156.0, context: eventUnavailable, notes: "t023-event-unavailable" }),
+    contextTrade({ id: t023Id(18), openedAt: recent, closedAt: recent, exitPrice: 157.0, context: dll, notes: "t023-dll" }),
   ];
 }
 
