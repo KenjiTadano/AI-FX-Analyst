@@ -30,11 +30,11 @@ test.describe("pre-trade context snapshot", () => {
     await openDashboard(page, { analysis: "trigger-price-below", calendar: "empty", marketPrice: 156.18 });
     const form = await openTradeForm(page);
     await expect(form.getByTestId("pretrade-preview")).toBeVisible();
-    await expect(form.getByTestId("pretrade-preview")).toContainText("AI方向 SELL");
-    await expect(form.getByTestId("pretrade-preview")).toContainText("Action WAIT");
-    await expect(form.getByTestId("pretrade-preview")).toContainText("Readiness 5 / 5");
-    await expect(form.getByTestId("pretrade-preview")).toContainText("Trigger 条件成立");
-    await expect(form.getByText("AI分析では現在WAITです。登録は禁止しません。")).toBeVisible();
+    await expect(form.getByTestId("pretrade-review-direction")).toHaveText("SELL");
+    await expect(form.getByTestId("pretrade-review-action")).toHaveText("WAIT");
+    await expect(form.getByTestId("pretrade-review-readiness")).toHaveText("5 / 5");
+    await expect(form.getByTestId("pretrade-review-trigger")).toHaveText("条件成立");
+    await expect(form.getByText("現在のActionはWAITです。")).toBeVisible();
   });
 
   test("2 SELL + WAIT + MET snapshot save", async ({ page }) => {

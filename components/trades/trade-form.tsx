@@ -4,12 +4,11 @@ import type { AIAnalysis } from "@/lib/ai/types";
 import type { ChartImageAnalysis } from "@/lib/chart-analysis/types";
 import { actionGuidanceLabel, directionBiasLabel, signalLabels as decisionSignalLabels } from "@/lib/ai/decision-ui";
 import { pairs, type Trade, type TradeDraft } from "@/lib/trades/types";
-import { capturePreTradeContext } from "@/lib/trades/pre-trade-context";
 import { isRichSnapshot } from "@/lib/trades/snapshot";
-import { buildEntryTriggerWatch } from "@/lib/trading-plan/entry-trigger-watch";
+import { buildPreTradeReview } from "@/lib/trades/pre-trade-review";
 import type { DailyTradingPlan } from "@/lib/trading-plan/daily-plan";
 import type { EntryReadiness } from "@/lib/trading-plan/entry-readiness";
-import { PreTradeContextPreview } from "./pre-trade-context";
+import { PreTradeReview } from "./pre-trade-review";
 import { dateTime, fromLocalDateTime, localDateTime, signalLabels } from "./format";
 
 interface Props {
@@ -71,34 +70,20 @@ export function TradeForm({ trade, mode, pair, rate, analysis, chartImageAnalysi
   const stored = mode !== "new" ? trade?.analysisSnapshot ?? null : null;
   const action = live?.action ?? (live?.signal === "wait" ? "WAIT" : live?.signal.includes("buy") ? "BUY" : live?.signal.includes("sell") ? "SELL" : null);
   const direction = live?.directionSignal ?? live?.signal ?? null;
-  const waitWarn = mode === "new" && live && (action === "WAIT" || live.signal === "wait");
-  const aiBuy = direction === "buy" || direction === "strong_buy";
-  const aiSell = direction === "sell" || direction === "strong_sell";
-  const conflict = mode === "new" && live && action !== "WAIT" && ((fields.side === "long" && aiSell) || (fields.side === "short" && aiBuy));
   const chartPreview = live?.chartEvidence?.used
     ? `${live.chartEvidence.timeframe ?? "時間足未検出"} / ${live.chartEvidence.trend} / quality ${live.chartEvidence.qualityScore}`
     : chartImageAnalysis && chartImageAnalysis.pair === fields.pair
       ? `${chartImageAnalysis.detected.timeframe ?? "時間足未検出"} / ${chartImageAnalysis.trend.direction} / 未添付`
       : "なし";
-  const source = mode === "new" && saveSnapshot ? getPreTradeSource?.() ?? null : null;
-  const preview = mode === "new" && saveSnapshot && live
-    ? capturePreTradeContext({
+  const source = mode === "new" ? getPreTradeSource?.() ?? null : null;
+  const review = mode === "new"
+    ? buildPreTradeReview({
       pair: fields.pair,
-      capturedAt: live.analyzedAt,
+      tradeSide: fields.side === "short" ? "SELL" : "BUY",
       analysis: live,
       dailyPlan: source?.plan ?? null,
       readiness: source?.readiness ?? null,
-      distanceToTriggerPips: source?.readiness
-        ? buildEntryTriggerWatch({
-          trigger: source.readiness.entryTrigger,
-          evaluation: source.readiness.triggerEvaluation,
-          action: source.readiness.action,
-          direction: source.readiness.direction,
-          stale: source.readiness.stale,
-          dailyLossLimitReached: source.readiness.dailyLossLimitReached,
-          pair: fields.pair,
-        })?.distanceToTriggerPips ?? null
-        : null,
+      saveAnalysis: saveSnapshot,
     })
     : null;
 
@@ -122,11 +107,9 @@ export function TradeForm({ trade, mode, pair, rate, analysis, chartImageAnalysi
           <p>確信度：{live.confidence}% · 分析時刻：{dateTime(live.analyzedAt)}</p>
           <p>Chart：{chartPreview}</p>
           {live.ai.status !== "available" && <p className="neutral">AI一部利用不可時の暫定分析です。</p>}
-          <PreTradeContextPreview context={preview} />
         </div>}
       </> : <p className="footnote">AI分析なし。スナップショットなしで記録できます。</p>}
-      {waitWarn && <p className="neutral" role="status">AI分析では現在WAITです。登録は禁止しません。</p>}
-      {conflict && <p className="neutral" role="status">現在のAI方向と逆方向の取引です。登録は禁止しません。</p>}
+      {review && <PreTradeReview review={review} />}
       <p className="footnote">登録時に表示中の分析をコピーします。OpenAI / Vision は再実行しません。チャート画像そのものは保存しません。</p>
     </section>}
 

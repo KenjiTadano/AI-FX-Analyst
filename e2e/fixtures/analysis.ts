@@ -55,6 +55,17 @@ export function priceBelowTrigger(pair: Symbol = "USD/JPY"): StructuredEntryTrig
   };
 }
 
+export function priceAboveTrigger(pair: Symbol = "USD/JPY"): StructuredEntryTrigger {
+  return {
+    version: 1,
+    type: "price_above",
+    pair,
+    price: 156.1,
+    timeframe: null,
+    sourceCondition: "現在価格が156.10を上回った場合",
+  };
+}
+
 export function candleBelowTrigger(pair: Symbol = "USD/JPY"): StructuredEntryTrigger {
   return {
     version: 1,
@@ -77,6 +88,7 @@ export type AnalysisFixtureName =
   | "no-sl-tp"
   | "event-unavailable"
   | "trigger-price-below"
+  | "trigger-price-above"
   | "trigger-candle-below"
   | "trigger-stale"
   | "trigger-event-unavailable";
@@ -152,6 +164,9 @@ export function analysisFixture(
   }
   if (name === "trigger-price-below") {
     return { ...base, directionSignal: "sell", action: "WAIT", signal: "wait", scenario: SHORT_SCENARIO, entryTrigger: priceBelowTrigger(pair) };
+  }
+  if (name === "trigger-price-above") {
+    return { ...base, directionSignal: "buy", action: "WAIT", signal: "wait", scenario: LONG_SCENARIO, entryTrigger: priceAboveTrigger(pair) };
   }
   if (name === "trigger-candle-below") {
     return { ...base, directionSignal: "sell", action: "WAIT", signal: "wait", scenario: SHORT_SCENARIO, entryTrigger: candleBelowTrigger(pair) };

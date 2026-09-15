@@ -11,25 +11,11 @@ import {
   formatPreTradeTriggerStatus,
 } from "@/lib/trades/pre-trade-context";
 import { isRichSnapshot } from "@/lib/trades/snapshot";
-import type { PreTradeContextSnapshot, Trade } from "@/lib/trades/types";
+import type { Trade } from "@/lib/trades/types";
 import { money } from "./format";
 
 function row(label: string, value: string, testId: string) {
   return <div><dt>{label}</dt><dd data-testid={testId}>{value}</dd></div>;
-}
-
-export function PreTradeContextPreview({ context }: { context: PreTradeContextSnapshot | null }) {
-  if (!context) return null;
-  return (
-    <div className="pretrade-preview" data-testid="pretrade-preview">
-      <p><strong>保存される判断状況</strong></p>
-      <p className="eyebrow">{PRE_TRADE_EYEBROW}</p>
-      <p>AI方向 {context.direction ?? "—"}</p>
-      <p>Action {context.action ?? "—"}</p>
-      <p>Readiness {context.readiness ? `${context.readiness.confirmedCount} / ${context.readiness.totalCount}` : "—"}</p>
-      <p>Trigger {formatPreTradeTriggerStatus(context)}</p>
-    </div>
-  );
 }
 
 export function PreTradeContextDetail({
