@@ -387,3 +387,30 @@ h2 { font-size: 17px; font-weight: 600; margin-top: 4px; }
   .daily-plan-meta { grid-template-columns: 1fr; min-width: 0; width: 100%; }
   .daily-plan-hero { padding: 16px; }
 }
+
+/* Task019 Entry Readiness */
+.entry-readiness-panel { grid-column: 1 / -1; min-width: 0; }
+.entry-readiness-hero { margin: 0 0 14px; padding: 16px 18px; border: 1px solid #3a4d66; border-radius: 12px; background: linear-gradient(180deg, #152234, #101a28); }
+.entry-readiness-hero .eyebrow { color: var(--green); margin-bottom: 6px; }
+.entry-readiness-count { margin: 0; font-size: clamp(28px, 5vw, 40px); font-weight: 700; letter-spacing: -1px; overflow-wrap: anywhere; }
+.entry-readiness-action-word { margin: 4px 0 0; font-size: clamp(24px, 4vw, 32px); font-weight: 700; overflow-wrap: anywhere; }
+.entry-readiness-action-message, .entry-readiness-guidance { margin: 6px 0 0; font-size: 16px; font-weight: 600; overflow-wrap: anywhere; }
+.entry-readiness-hero.entry-readiness-state-warning { border-color: #6a5230; background: #241c12; }
+.entry-readiness-hero.entry-readiness-state-unavailable { border-color: #3a4d66; background: #101a28; }
+.entry-readiness-alert { margin: 0 0 14px; padding: 12px 14px; border-radius: 8px; border: 1px solid #6a5230; background: #241c12; color: #f0d9a8; }
+.entry-readiness-alert button { margin-top: 10px; }
+.entry-readiness-list { list-style: none; margin: 14px 0; padding: 0; display: grid; gap: 10px; }
+.entry-readiness-check { display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: 10px; align-items: start; min-width: 0; border: 1px solid var(--border); border-radius: 10px; padding: 12px; background: #0d1623; }
+.entry-readiness-check p { margin: 0; overflow-wrap: anywhere; }
+.entry-readiness-mark { font-size: 18px; font-weight: 700; line-height: 1.2; }
+.entry-readiness-status-label { display: inline-block; margin-left: 8px; font-size: 12px; font-weight: 600; color: var(--muted); }
+.entry-readiness-card { min-width: 0; border: 1px solid var(--border); border-radius: 10px; padding: 16px; background: #0d1623; }
+.entry-readiness-card h3 { margin: 0 0 10px; font-size: 13px; }
+.entry-readiness-card p { overflow-wrap: anywhere; }
+@media (min-width: 1000px) {
+  .dashboard-grid.decision-layout > .entry-readiness-panel { grid-column: 1 / -1; }
+}
+@media (max-width: 540px) {
+  .entry-readiness-hero { padding: 14px; }
+  .entry-readiness-check { grid-template-columns: 22px minmax(0, 1fr); padding: 10px; }
+}

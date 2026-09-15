@@ -10,8 +10,10 @@ test.describe("responsive", () => {
     await expect(page.getByTestId("daily-plan-action")).toBeVisible();
     await expect(page.getByTestId("daily-plan-message")).toBeVisible();
     await expect(page.getByTestId("daily-plan-direction")).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Entry条件" })).toBeVisible();
+    await expect(page.getByTestId("daily-plan").getByRole("heading", { name: "Entry条件", exact: true })).toBeVisible();
     await expect(page.getByTestId("daily-plan").getByText("156.20を下抜けたあと")).toBeVisible();
+    await expect(page.getByTestId("entry-readiness")).toBeVisible();
+    await expect(page.getByRole("heading", { name: "エントリー準備度" })).toBeVisible();
     await assertNoOverflow(page);
   });
 
@@ -19,8 +21,9 @@ test.describe("responsive", () => {
     await page.setViewportSize({ width: 1280, height: 900 });
     await openDashboard(page, { analysis: "sell-wait" });
     await expect(page.getByTestId("daily-plan-hero")).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Entry条件" })).toBeVisible();
+    await expect(page.getByTestId("daily-plan").getByRole("heading", { name: "Entry条件", exact: true })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Risk", exact: true })).toBeVisible();
+    await expect(page.getByTestId("entry-readiness")).toBeVisible();
     await assertNoOverflow(page);
   });
 });

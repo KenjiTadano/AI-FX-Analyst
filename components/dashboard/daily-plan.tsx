@@ -14,6 +14,8 @@ import {
   parseDailyLossLimitPercent,
   type DailyPlanStatus,
 } from "@/lib/trading-plan/daily-plan";
+import { buildEntryReadiness } from "@/lib/trading-plan/entry-readiness";
+import { EntryReadinessPanel } from "./entry-readiness";
 import { Panel } from "./panels";
 
 const LIMIT_KEY = (userId: string) => `ai-fx-analyst.daily-loss-limit-percent:${userId || "anon"}`;
@@ -104,6 +106,12 @@ export function DailyTradingPlanPanel({
     dailyLossLimitPercent: limitPercent,
     now,
   }), [pair, analysis, trades, riskSettings, currentRate, calendar, limitPercent, now]);
+  const readiness = useMemo(() => buildEntryReadiness({
+    pair,
+    analysis,
+    dailyPlan: plan,
+    riskSettings,
+  }), [pair, analysis, plan, riskSettings]);
 
   function changeLimit(value: string) {
     setLimitDraft(value);
@@ -111,6 +119,7 @@ export function DailyTradingPlanPanel({
   }
 
   return (
+    <>
     <Panel title="今日のトレード計画" eyebrow="DAILY TRADING PLAN" className="daily-plan-panel" testId="daily-plan">
       <div className="daily-plan-header">
         <div>
@@ -209,5 +218,7 @@ export function DailyTradingPlanPanel({
       <p className="footnote" data-testid="daily-plan-confidence-disclaimer">{CONFIDENCE_DISCLAIMER}</p>
       <p className="footnote" data-testid="daily-plan-no-auto">{NO_AUTO_TRADING_COPY}</p>
     </Panel>
+    <EntryReadinessPanel readiness={readiness} onRefresh={onRefresh} refreshing={refreshing} />
+    </>
   );
 }

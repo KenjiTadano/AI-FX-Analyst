@@ -4,7 +4,7 @@ import type { Symbol } from "../../lib/market/types";
 import { e2eOrigin } from "../env";
 import { analysisFixture, type AnalysisFixtureName } from "../fixtures/analysis";
 import { e2eAuthCookie, e2eAuthCookieName, e2eAuthCookieValue, e2eSession, e2eUser } from "../fixtures/auth";
-import { fundamentalFixture } from "../fixtures/fundamental";
+import { fundamentalFixture, type CalendarFixtureName } from "../fixtures/fundamental";
 import { E2E_USER_ID } from "../fixtures/ids";
 import { marketFixture } from "../fixtures/market";
 import { performanceTrades, settingsRow, tradeRows } from "../fixtures/trades";
@@ -24,6 +24,7 @@ export type DashboardScenario = {
   analyses?: Partial<Record<Symbol, AnalysisFixtureName | "unavailable">>;
   dailyLossLimitPercent?: number | null;
   includeTrades?: boolean;
+  calendar?: CalendarFixtureName;
 };
 
 function cors(request: Request): Record<string, string> {
@@ -127,7 +128,7 @@ export async function installDashboardMocks(page: Page, scenario: DashboardScena
 
   await context.route(/\/api\/fundamental(?:\?|$)/, async route => {
     const symbol = (new URL(route.request().url()).searchParams.get("symbol") ?? "USD/JPY") as Symbol;
-    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(fundamentalFixture(symbol, now)) });
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(fundamentalFixture(symbol, now, scenario.calendar)) });
   });
 
   await context.route(/\/api\/chart-analysis(?:\?|$)/, async route => {

@@ -10,6 +10,7 @@ export async function openDashboard(page: Page, scenario: DashboardScenario = {}
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "今日のトレード計画" })).toBeVisible();
   await expect(page.getByTestId("daily-plan")).toBeVisible();
+  await expect(page.getByTestId("entry-readiness")).toBeVisible();
   await expect(page.getByText("認証確認中…")).toHaveCount(0);
   return { leaks, errors };
 }

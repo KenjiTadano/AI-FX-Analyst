@@ -51,7 +51,8 @@ export type AnalysisFixtureName =
   | "stale"
   | "chart-evidence"
   | "long-condition"
-  | "no-sl-tp";
+  | "no-sl-tp"
+  | "event-unavailable";
 
 export function analysisFixture(
   name: AnalysisFixtureName,
@@ -110,6 +111,16 @@ export function analysisFixture(
   }
   if (name === "long-condition") {
     return { ...base, directionSignal: "sell", action: "WAIT", signal: "wait", scenario: LONG_TEXT_SCENARIO };
+  }
+  if (name === "event-unavailable") {
+    return {
+      ...base,
+      directionSignal: "sell",
+      action: "WAIT",
+      signal: "wait",
+      scenario: SHORT_SCENARIO,
+      economicRisk: { active: false, known: false, reasons: [], nextHigh: null },
+    };
   }
   return { ...base, directionSignal: "wait", action: "WAIT", signal: "wait", scenario: null };
 }

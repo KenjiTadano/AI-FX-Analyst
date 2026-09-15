@@ -38,10 +38,23 @@ export function upcomingEvent(now = Date.now()): EconomicEvent {
   };
 }
 
-export function fundamentalFixture(symbol: Symbol, now = Date.now()): FundamentalData {
+export type CalendarFixtureName = "high" | "empty" | "unavailable";
+
+export function fundamentalFixture(symbol: Symbol, now = Date.now(), calendarMode?: CalendarFixtureName): FundamentalData {
   const [baseCurrency, quoteCurrency] = symbol.split("/") as ["USD" | "EUR" | "GBP", "JPY"];
   const news: NewsItem[] = [];
-  const calendar = symbol === "USD/JPY" ? [upcomingEvent(now)] : [];
+  const mode = calendarMode ?? (symbol === "USD/JPY" ? "high" : "empty");
+  const calendarEvents = mode === "high" ? [upcomingEvent(now)] : [];
+  const calendar = mode === "unavailable"
+    ? {
+      data: null as EconomicEvent[] | null,
+      status: "unavailable" as const,
+      provider: "E2E",
+      fetchedAt: new Date(now).toISOString(),
+      error: { code: "network" as const, message: "E2E calendar unavailable" },
+      warnings: [],
+    }
+    : calendarEvents.length ? resource(calendarEvents, now, "E2E") : emptyArray<EconomicEvent>(now, "E2E");
   return {
     schemaVersion: 1,
     symbol,
@@ -49,7 +62,7 @@ export function fundamentalFixture(symbol: Symbol, now = Date.now()): Fundamenta
     quoteCurrency,
     generatedAt: new Date(now).toISOString(),
     news: resource(news, now, "E2E"),
-    calendar: calendar.length ? resource(calendar, now, "E2E") : emptyArray<EconomicEvent>(now, "E2E"),
+    calendar,
     macroeconomic: {
       data: [],
       status: "empty",
@@ -61,7 +74,7 @@ export function fundamentalFixture(symbol: Symbol, now = Date.now()): Fundamenta
     centralBanks: emptyArray<CentralBank>(now, "E2E"),
     sentiment: emptyObject<SentimentData>(now, "E2E"),
     factors: [
-      { currency: baseCurrency, newsIds: [], economicEventIds: calendar.map(event => event.id), centralBank: "TEST", impactDirection: null },
+      { currency: baseCurrency, newsIds: [], economicEventIds: calendarEvents.map(event => event.id), centralBank: "TEST", impactDirection: null },
       { currency: quoteCurrency, newsIds: [], economicEventIds: [], centralBank: "BOJ", impactDirection: null },
     ],
   };
