@@ -2,6 +2,8 @@ import type { PreTradeContextSnapshot, TradeAiAnalysisSnapshot, Trade } from "..
 import { pnl } from "../../lib/trades/calculations";
 import { E2E_USER_ID, TRADE_IDS, daysAgo, iso, localDayOffset } from "./ids";
 import type { TradeSignal } from "../../lib/ai/types";
+import type { HigherTimeframeBias, MultiTimeframeAnalysis, TimeframeAlignment, TimeframeAnalysis, TimeframeTrend } from "../../lib/market/multi-timeframe";
+import { mtfTimeframes } from "../../lib/market/types";
 
 function quality() {
   return {
@@ -459,6 +461,161 @@ export function postTradeReviewTrades(now = Date.now()): Trade[] {
 
 function t025Id(n: number): string {
   return `11111111-1111-4111-8111-111111111${String(400 + n).padStart(3, "0")}`;
+}
+
+function t028Id(n: number): string {
+  return `11111111-1111-4111-8111-111111111${String(500 + n).padStart(3, "0")}`;
+}
+
+function mtfFrame(tf: TimeframeAnalysis["timeframe"], trend: TimeframeTrend): TimeframeAnalysis {
+  const ok = trend !== "unavailable";
+  return {
+    timeframe: tf,
+    trend,
+    structure: trend === "bullish" ? "uptrend" : trend === "bearish" ? "downtrend" : trend === "neutral" ? "mixed" : "unavailable",
+    lastClose: ok ? 156.5 : null,
+    sma20: ok ? 156.3 : null,
+    sma75: ok ? 156.1 : null,
+    sma200: ok ? 155.8 : null,
+    rsi14: ok ? 55 : null,
+    recentHigh: ok ? 157 : null,
+    recentLow: ok ? 156 : null,
+    dataPoints: ok ? 240 : 0,
+    sufficientData: ok,
+  };
+}
+
+function e2eMtf(args: { alignment: TimeframeAlignment; bias: HigherTimeframeBias; trends?: TimeframeTrend[] }): MultiTimeframeAnalysis {
+  const trends = args.trends ?? mtfTimeframes.map(tf => {
+    if (args.alignment === "aligned_bullish") return "bullish" as const;
+    if (args.alignment === "aligned_bearish") return "bearish" as const;
+    if (args.alignment === "insufficient") {
+      if (args.bias === "unavailable") return "unavailable" as const;
+      return tf === "15m" ? "unavailable" as const : "bullish" as const;
+    }
+    if (args.bias === "neutral") return (tf === "1day" || tf === "1h" ? "bullish" : "bearish") as TimeframeTrend;
+    return (tf === "1day" || tf === "4h" ? "bullish" : "bearish") as TimeframeTrend;
+  });
+  const timeframes = mtfTimeframes.map((tf, index) => mtfFrame(tf, trends[index] ?? "unavailable"));
+  return {
+    pair: "USD/JPY",
+    analyzedAt: new Date().toISOString(),
+    timeframes,
+    higherTimeframeBias: args.bias,
+    alignment: args.alignment,
+    availableTimeframes: timeframes.filter(item => item.trend !== "unavailable").length,
+    totalTimeframes: 4,
+    conflicts: [],
+  };
+}
+
+function mtfTrade(args: {
+  id: string;
+  openedAt: string;
+  closedAt: string;
+  side: "long" | "short";
+  exitPrice: number;
+  notes: string;
+  mtf: MultiTimeframeAnalysis;
+  direction?: TradeSignal;
+  action?: "BUY" | "SELL" | "WAIT";
+  snapshot?: boolean;
+}): Trade {
+  return closedTrade({
+    id: args.id,
+    openedAt: args.openedAt,
+    closedAt: args.closedAt,
+    side: args.side,
+    entryPrice: 156.5,
+    exitPrice: args.exitPrice,
+    notes: args.notes,
+    snapshot: args.snapshot === false ? null : richSnapshot({
+      analyzedAt: args.openedAt,
+      capturedAt: args.openedAt,
+      expiresAt: args.openedAt,
+      directionSignal: args.direction ?? "buy",
+      action: args.action ?? "WAIT",
+      signal: args.direction === "sell" ? "sell" : args.direction === "buy" ? "buy" : "wait",
+      multiTimeframeAnalysis: args.mtf,
+    }),
+  });
+}
+
+/** Task028: saved MTF groups + legacy. Dates span 5d / 45d / 120d. */
+export function mtfPerformanceTrades(now = Date.now()): Trade[] {
+  const recent = daysAgo(5, now);
+  const month = daysAgo(45, now);
+  const old = daysAgo(120, now);
+  const bullish = e2eMtf({ alignment: "aligned_bullish", bias: "bullish" });
+  const bearish = e2eMtf({ alignment: "aligned_bearish", bias: "bearish" });
+  const mixed = e2eMtf({ alignment: "mixed", bias: "bullish" });
+  const partial = e2eMtf({ alignment: "insufficient", bias: "bullish" });
+  const allUnavailable = e2eMtf({
+    alignment: "insufficient",
+    bias: "unavailable",
+    trends: ["unavailable", "unavailable", "unavailable", "unavailable"],
+  });
+  const neutral = e2eMtf({ alignment: "mixed", bias: "neutral" });
+
+  const recentAligned = [1, 2, 3, 4, 5].map(n => mtfTrade({
+    id: t028Id(n), openedAt: recent, closedAt: recent, side: "long", exitPrice: 157.0,
+    notes: "t028-aligned-bullish", mtf: bullish, direction: "buy", action: "WAIT",
+  }));
+  const recentContrary = [6, 7, 8, 9, 10].map(n => mtfTrade({
+    id: t028Id(n), openedAt: recent, closedAt: recent, side: "long", exitPrice: 156.0,
+    notes: "t028-contrary", mtf: bearish, direction: "buy", action: "BUY",
+  }));
+  const recentMixed = [11, 12, 13, 14, 15].map(n => mtfTrade({
+    id: t028Id(n), openedAt: recent, closedAt: recent, side: "long", exitPrice: 157.0,
+    notes: "t028-mixed", mtf: mixed, direction: "buy",
+  }));
+  const recentPartial = [16, 17, 18, 19, 20].map(n => mtfTrade({
+    id: t028Id(n), openedAt: recent, closedAt: recent, side: "long", exitPrice: 156.0,
+    notes: "t028-insufficient", mtf: partial, direction: "buy",
+  }));
+  const recentUnavailable = [21, 22, 23, 24, 25].map(n => mtfTrade({
+    id: t028Id(n), openedAt: recent, closedAt: recent, side: "long", exitPrice: 157.0,
+    notes: "t028-unavailable", mtf: allUnavailable, direction: "buy",
+  }));
+  const recentLegacy = [26, 27, 28, 29, 30].map(n => mtfTrade({
+    id: t028Id(n), openedAt: recent, closedAt: recent, side: "short", exitPrice: 156.0,
+    notes: "t028-legacy", mtf: bullish, snapshot: false,
+  }));
+  const recentNeutral = [31, 32].map(n => mtfTrade({
+    id: t028Id(n), openedAt: recent, closedAt: recent, side: "long", exitPrice: 157.0,
+    notes: "t028-htf-neutral", mtf: neutral, direction: "buy",
+  }));
+  const monthAligned = [33, 34, 35, 36, 37].map(n => mtfTrade({
+    id: t028Id(n), openedAt: month, closedAt: month, side: "long", exitPrice: 157.0,
+    notes: "t028-aligned-90d", mtf: bullish, direction: "buy", action: "WAIT",
+  }));
+  const oldBearish = [38, 39, 40].map(n => mtfTrade({
+    id: t028Id(n), openedAt: old, closedAt: old, side: "long", exitPrice: 156.0,
+    notes: "t028-bearish-old", mtf: bearish, direction: "sell",
+  }));
+  const openTrade = {
+    ...mtfTrade({
+      id: t028Id(41), openedAt: recent, closedAt: recent, side: "long", exitPrice: 157.0,
+      notes: "t028-open", mtf: bullish, direction: "buy",
+    }),
+    status: "open" as const,
+    exitPrice: null,
+    closedAt: null,
+    realizedPnl: null,
+  };
+
+  return [
+    ...recentAligned,
+    ...recentContrary,
+    ...recentMixed,
+    ...recentPartial,
+    ...recentUnavailable,
+    ...recentLegacy,
+    ...recentNeutral,
+    ...monthAligned,
+    ...oldBearish,
+    openTrade,
+  ];
 }
 
 export function settingsRow(now = Date.now()) {
