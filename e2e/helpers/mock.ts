@@ -6,7 +6,7 @@ import { analysisFixture, type AnalysisFixtureName } from "../fixtures/analysis"
 import { e2eAuthCookie, e2eAuthCookieName, e2eAuthCookieValue, e2eSession, e2eUser } from "../fixtures/auth";
 import { fundamentalFixture, type CalendarFixtureName } from "../fixtures/fundamental";
 import { E2E_USER_ID } from "../fixtures/ids";
-import { marketFixture, type MtfFixtureName } from "../fixtures/market";
+import { marketFixture, type MtfFixtureName, type RegimeFixtureName } from "../fixtures/market";
 import { performanceTrades, preTradeFullContextTrades, preTradePerformanceTrades, postTradeReviewTrades, mtfPerformanceTrades, settingsRow, tradeRows } from "../fixtures/trades";
 
 const BLOCKED = [
@@ -32,6 +32,8 @@ export type DashboardScenario = {
   omitCandles?: boolean;
   mtf?: MtfFixtureName;
   mtfByPair?: Partial<Record<Symbol, MtfFixtureName>>;
+  regime?: RegimeFixtureName;
+  regimeByPair?: Partial<Record<Symbol, RegimeFixtureName>>;
 };
 
 function cors(request: Request): Record<string, string> {
@@ -71,7 +73,7 @@ function resolveAnalysis(
 
 export async function installDashboardMocks(page: Page, scenario: DashboardScenario = {}): Promise<{
   leaks: string[];
-  setMarket: (opts: { price?: number; candleClose?: number; stale?: boolean; omitCandles?: boolean; mtf?: MtfFixtureName }) => void;
+  setMarket: (opts: { price?: number; candleClose?: number; stale?: boolean; omitCandles?: boolean; mtf?: MtfFixtureName; regime?: RegimeFixtureName }) => void;
   setAnalysis: (name: AnalysisFixtureName | "unavailable") => void;
 }> {
   const now = Date.now();
@@ -154,6 +156,7 @@ export async function installDashboardMocks(page: Page, scenario: DashboardScena
         stale: live.marketStale,
         omitCandles: live.omitCandles,
         mtf: live.mtfByPair?.[symbol] ?? live.mtf,
+        regime: live.regimeByPair?.[symbol] ?? live.regime,
       })),
     });
   });
@@ -250,6 +253,7 @@ export async function installDashboardMocks(page: Page, scenario: DashboardScena
       if (opts.stale !== undefined) live.marketStale = opts.stale;
       if (opts.omitCandles !== undefined) live.omitCandles = opts.omitCandles;
       if (opts.mtf !== undefined) live.mtf = opts.mtf;
+      if (opts.regime !== undefined) live.regime = opts.regime;
     },
     setAnalysis(name) {
       live.analysis = name;

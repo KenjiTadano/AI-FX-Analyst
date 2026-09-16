@@ -110,6 +110,8 @@ h2 { font-size: 17px; font-weight: 600; margin-top: 4px; }
 .mtf-conflicts { margin-top: 16px; min-width: 0; }
 .mtf-conflicts p { margin: 0 0 6px; font-size: 13px; }
 .mtf-conflicts ul { margin: 0; padding-left: 1.2em; font-size: 13px; line-height: 1.6; overflow-wrap: anywhere; }
+.regime-panel { min-width: 0; }
+.regime-reasons { margin: 12px 0 0; padding-left: 1.2em; font-size: 13px; line-height: 1.6; overflow-wrap: anywhere; }
 @media (min-width: 800px) {
   .mtf-summary { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .mtf-frames { grid-template-columns: repeat(4, minmax(0, 1fr)); }

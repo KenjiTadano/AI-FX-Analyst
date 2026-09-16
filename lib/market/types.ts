@@ -23,4 +23,6 @@ export type MarketData = {
   timeframes: Record<Timeframe, Resource<Technical>>;
   /** Task026 1day series. Optional so Task003 fixtures stay valid. */
   daily?: Resource<Technical>;
-};
+  /** Task029 live regime. Optional so Task003/026 fixtures stay valid. Computed from 1h candles, never a trade signal. */
+  marketRegimeAnalysis?: import("./market-regime").MarketRegimeAnalysis;
+}

@@ -4,6 +4,7 @@ import { canAttachToPairAnalysis } from "../chart-analysis/normalize";
 import type { ChartImageAnalysis } from "../chart-analysis/types";
 import { FRED_SERIES_COUNT } from "../fundamental/fred-series";
 import { mtfEvidencePayload, multiTimeframeForPair, sanitizeMultiTimeframeAnalysis } from "../market/multi-timeframe";
+import { marketRegimeForPair, regimeEvidencePayload, sanitizeMarketRegimeAnalysis } from "../market/market-regime";
 import type { MarketData, Symbol } from "../market/types";
 import type { DataResource, EconomicIndicatorValue, FundamentalData } from "../fundamental/types";
 import { currentRate, evaluateTechnical, fresh } from "./technical";
@@ -90,7 +91,8 @@ export function buildInput(pair: Symbol, market: MarketData | null, fundamentals
       evidence.push({ id: `sentiment:${item.id}`, categories: ["market_environment"], title: item.id, source: item.observation.source ?? "sentiment provider", observedAt: item.observation.asOf, data: { subject: item.id, value: item.observation.value } });
     }
   }
-  const mtf = sanitizeMultiTimeframeAnalysis(multiTimeframeForPair(market, pair, new Date(now).toISOString()), pair);
+  const analyzedAt = new Date(now).toISOString();
+  const mtf = sanitizeMultiTimeframeAnalysis(multiTimeframeForPair(market, pair, analyzedAt), pair);
   if (mtf) {
     evidence.push({
       id: "technical:mtf",
@@ -99,6 +101,17 @@ export function buildInput(pair: Symbol, market: MarketData | null, fundamentals
       title: "マルチタイムフレーム市場構造",
       observedAt: mtf.analyzedAt,
       data: mtfEvidencePayload(mtf),
+    });
+  }
+  const regime = sanitizeMarketRegimeAnalysis(marketRegimeForPair(market, pair, analyzedAt), pair);
+  if (regime) {
+    evidence.push({
+      id: "technical:regime",
+      categories: ["technical"],
+      source: "Twelve Data",
+      title: "1時間足の相場環境",
+      observedAt: regime.analyzedAt,
+      data: regimeEvidencePayload(regime),
     });
   }
   const attachedChart = canAttachToPairAnalysis(chartImageAnalysis, pair) ? chartImageAnalysis : undefined;
@@ -151,5 +164,5 @@ export function buildInput(pair: Symbol, market: MarketData | null, fundamentals
     macroeconomicData: macroQuality,
   };
   const eventRisk: AnalysisInput["eventRisk"] = { ...riskState(events, now), events, known: calendarFresh };
-  return { pair, currentRate: rate, technicalAnalysis, fundamentalData: evidence, dataAvailability, timestamp: new Date(now).toISOString(), eventRisk, ...(attachedChart ? { chartImageAnalysis: attachedChart } : {}), ...(mtf ? { multiTimeframeAnalysis: mtf } : {}) };
+  return { pair, currentRate: rate, technicalAnalysis, fundamentalData: evidence, dataAvailability, timestamp: analyzedAt, eventRisk, ...(attachedChart ? { chartImageAnalysis: attachedChart } : {}), ...(mtf ? { multiTimeframeAnalysis: mtf } : {}), ...(regime ? { marketRegimeAnalysis: regime } : {}) };
 }
