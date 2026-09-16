@@ -5,9 +5,11 @@ import type { DailyTradingPlan } from "../trading-plan/daily-plan";
 import type { EntryReadiness } from "../trading-plan/entry-readiness";
 import type { MarketData, Symbol as MarketSymbol } from "../market/types";
 import { sanitizeMultiTimeframeAnalysis } from "../market/multi-timeframe";
+import { sanitizeMarketRegimeAnalysis } from "../market/market-regime";
 import { pairs, type TradeAnalysisSnapshot, type TradeAiAnalysisSnapshot, type TradeChartAnalysisSnapshot, type TradePair, type AiAlignment } from "./types";
 import { capturePreTradeContext, sanitizePreTradeContext } from "./pre-trade-context";
 import { captureMultiTimeframeSnapshot } from "./mtf-snapshot";
+import { captureMarketRegimeSnapshot } from "./regime-snapshot";
 
 const TEXT = (max: number) => (value: unknown) => typeof value === "string" ? value.trim().slice(0, max) : null;
 const NUM = (min: number, max: number) => (value: unknown) => typeof value === "number" && Number.isFinite(value) && value >= min && value <= max ? value : null;
@@ -230,6 +232,11 @@ export function captureTradeAiSnapshot(input: CaptureSnapshotInput): TradeAiAnal
       pair,
       ISO(market?.daily?.fetchedAt) ?? ISO(market?.price.fetchedAt) ?? capturedAt,
     ),
+    marketRegimeAnalysis: captureMarketRegimeSnapshot(
+      market,
+      pair,
+      ISO(market?.timeframes["1h"]?.fetchedAt) ?? ISO(market?.price.fetchedAt) ?? capturedAt,
+    ),
   };
   return sanitizeTradeAiSnapshot(snapshot);
 }
@@ -253,13 +260,15 @@ export function sanitizeTradeAiSnapshot(raw: unknown): TradeAiAnalysisSnapshot |
   const expiresAt = ISO(value.expiresAt);
   if (score === null || confidence === null || dataQualityScore === null || !summary || !analyzedAt || !capturedAt || !expiresAt) return null;
   if (typeof value.isFallback !== "boolean") return null;
-  const withoutContext = { ...value, preTradeContext: null, multiTimeframeAnalysis: null };
+  const withoutContext = { ...value, preTradeContext: null, multiTimeframeAnalysis: null, marketRegimeAnalysis: null };
   if (SECRET_PAYLOAD.test(JSON.stringify(withoutContext))) return null;
   const snapshot = value as unknown as TradeAiAnalysisSnapshot;
   snapshot.entryTrigger = sanitizeStructuredEntryTrigger(value.entryTrigger, String(value.pair));
   snapshot.preTradeContext = sanitizePreTradeContext(value.preTradeContext, String(value.pair));
   const mtf = sanitizeMultiTimeframeAnalysis(value.multiTimeframeAnalysis, String(value.pair) as MarketSymbol);
   snapshot.multiTimeframeAnalysis = mtf && !SECRET_PAYLOAD.test(JSON.stringify(mtf)) ? mtf : null;
+  const regime = sanitizeMarketRegimeAnalysis(value.marketRegimeAnalysis, String(value.pair) as MarketSymbol);
+  snapshot.marketRegimeAnalysis = regime && !SECRET_PAYLOAD.test(JSON.stringify(regime)) ? regime : null;
   return snapshot;
 }
 

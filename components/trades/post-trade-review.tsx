@@ -1,15 +1,13 @@
 import {
   POST_TRADE_REVIEW_DISCLAIMER,
   POST_TRADE_REVIEW_EYEBROW,
-  POST_TRADE_REVIEW_MISSING,
   POST_TRADE_REVIEW_SNAPSHOT_NOTE,
   POST_TRADE_REVIEW_TITLE,
   POST_TRADE_REVIEW_UNREADABLE,
   buildPostTradeReview,
 } from "@/lib/trades/post-trade-review";
 import type { Trade } from "@/lib/trades/types";
-import { PreTradeContextDetail } from "./pre-trade-context";
-import { MtfSnapshotDetail } from "./mtf-snapshot";
+import { StoredEntryContext } from "./entry-context";
 import { money, tone } from "./format";
 
 function row(label: string, value: string, testId: string, valueClass?: string) {
@@ -20,7 +18,6 @@ export function PostTradeReview({ trade }: { trade: Trade }) {
   const review = buildPostTradeReview(trade);
   if (!review) return null;
   const pnl = review.outcome.realizedPnl;
-  const missing = review.contextState === "unreadable" ? POST_TRADE_REVIEW_UNREADABLE : POST_TRADE_REVIEW_MISSING;
   return (
     <section className="posttrade-review" data-testid="post-trade-review" aria-label={POST_TRADE_REVIEW_TITLE}>
       <p className="eyebrow">{POST_TRADE_REVIEW_EYEBROW}</p>
@@ -39,11 +36,11 @@ export function PostTradeReview({ trade }: { trade: Trade }) {
         {row("結果", review.outcome.resultLabel, "post-trade-review-result")}
         {row("保有時間", review.outcome.holdingDurationLabel, "post-trade-review-duration")}
       </dl>
-      <p className="footnote">エントリー時</p>
-      {review.context ? <PreTradeContextDetail trade={trade} /> : (
-        <p className="footnote" data-testid={review.contextState === "unreadable" ? "post-trade-review-unreadable" : "pretrade-missing"}>{missing}</p>
+      <p className="footnote">エントリー時の判断状況</p>
+      {review.contextState === "unreadable" && (
+        <p className="footnote" data-testid="post-trade-review-unreadable">{POST_TRADE_REVIEW_UNREADABLE}</p>
       )}
-      <MtfSnapshotDetail trade={trade} />
+      <StoredEntryContext trade={trade} />
       {review.contextLabels.length > 0 && (
         <div className="posttrade-review-labels">
           <p>この取引のContext</p>

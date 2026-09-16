@@ -418,6 +418,24 @@ h2 { font-size: 17px; font-weight: 600; margin-top: 4px; }
 .mtf-snapshot-conflicts { margin: 8px 0; min-width: 0; }
 .mtf-snapshot-conflicts p { margin: 0 0 6px; font-size: 13px; }
 .mtf-snapshot-conflicts ul { margin: 0; padding-left: 1.2em; font-size: 13px; line-height: 1.7; overflow-wrap: anywhere; }
+.entry-context-group-label {
+  margin: 12px 0 0;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.entry-context, .regime-snapshot { margin-top: 10px; min-width: 0; }
+.entry-context h4, .regime-snapshot h4 { margin: 8px 0 4px; font-size: 13px; overflow-wrap: anywhere; }
+.entry-context p, .regime-snapshot p { overflow-wrap: anywhere; }
+@media (min-width: 1280px) {
+  .pretrade-review-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+@media (max-width: 540px) {
+  .entry-context .mtf-snapshot-grid, .regime-snapshot .mtf-snapshot-grid, .pretrade-review-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
 .pretrade-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 4px 12px; margin: 8px 0; min-width: 0; }
 .pretrade-grid div { display: grid; grid-template-columns: 7.5rem minmax(0, 1fr); gap: 8px; min-width: 0; }
 .pretrade-grid dt { color: var(--muted); }

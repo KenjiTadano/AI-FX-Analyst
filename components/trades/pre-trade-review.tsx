@@ -22,6 +22,7 @@ export function PreTradeReview({ review }: { review: PreTradeReviewModel }) {
         <strong>{review.pair}</strong>
         <span>{review.tradeSide}で登録予定</span>
       </p>
+      <p className="entry-context-group-label">AI</p>
       <dl
         className="pretrade-review-grid"
         data-testid={showPreview ? "pretrade-preview" : "pretrade-review-summary"}
@@ -29,14 +30,32 @@ export function PreTradeReview({ review }: { review: PreTradeReviewModel }) {
         {row("登録予定", review.tradeSide, "pretrade-review-trade-side")}
         {row("AI方向", review.direction ?? "未取得", "pretrade-review-direction")}
         {row("現在Action", review.action ?? "未取得", "pretrade-review-action")}
+      </dl>
+      <p className="entry-context-group-label">MARKET</p>
+      <dl className="pretrade-review-grid">
+        {row("MTF", review.mtf, "pretrade-review-mtf")}
+        {row("HTF Bias", review.htf, "pretrade-review-htf")}
+        {row("Regime", review.regime, "pretrade-review-regime")}
+        {row("Regime方向", review.regimeTrend, "pretrade-review-regime-trend")}
+        {row("Volatility", review.volatility, "pretrade-review-volatility")}
+      </dl>
+      <p className="entry-context-group-label">ENTRY</p>
+      <dl className="pretrade-review-grid">
         {row("準備度", review.readinessCount, "pretrade-review-readiness")}
         {row("Trigger", review.triggerStatus, "pretrade-review-trigger")}
         {row("Event Risk", review.eventRisk, "pretrade-review-event")}
-        {row("分析", review.freshness, "pretrade-review-freshness")}
-        {row("想定リスク", review.risk, "pretrade-review-risk")}
         {review.readinessState && row("準備状態", review.readinessState, "pretrade-review-readiness-state")}
         {review.triggerDistance && row("条件まで", review.triggerDistance, "pretrade-review-distance")}
         {review.triggerCheckedAt && row("判定確認", review.triggerCheckedAt, "pretrade-review-checked-at")}
+      </dl>
+      <p className="entry-context-group-label">RISK</p>
+      <dl className="pretrade-review-grid">
+        {row("想定リスク", review.risk, "pretrade-review-risk")}
+        {row("DLL", review.dll, "pretrade-review-dll")}
+      </dl>
+      <p className="entry-context-group-label">DATA</p>
+      <dl className="pretrade-review-grid">
+        {row("分析", review.freshness, "pretrade-review-freshness")}
       </dl>
       {review.triggerDistance && <p className="footnote">{PRE_TRADE_REVIEW_DISTANCE_DISCLAIMER}</p>}
       {showTriggerDisclaimer && <p className="footnote">{PRE_TRADE_REVIEW_TRIGGER_DISCLAIMER}</p>}

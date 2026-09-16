@@ -618,6 +618,52 @@ export function mtfPerformanceTrades(now = Date.now()): Trade[] {
   ];
 }
 
+function t030Id(n: number): string {
+  return `11111111-1111-4111-8111-111111111${String(800 + n).padStart(3, "0")}`;
+}
+
+/** Task030: AI + PreTrade + MTF without Regime, plus malformed Regime isolation. */
+export function entryContextFixtureTrades(now = Date.now()): Trade[] {
+  const at = daysAgo(5, now);
+  const context = preTradeSnapshotContext({ action: "WAIT", direction: "BUY" }, at);
+  const mtf = e2eMtf({ alignment: "aligned_bullish", bias: "bullish" });
+  const baseSnap = {
+    analyzedAt: at,
+    capturedAt: at,
+    expiresAt: at,
+    directionSignal: "buy" as const,
+    action: "WAIT" as const,
+    signal: "wait" as const,
+    preTradeContext: context,
+    multiTimeframeAnalysis: mtf,
+  };
+  return [
+    closedTrade({
+      id: t030Id(1),
+      openedAt: at,
+      closedAt: at,
+      side: "long",
+      entryPrice: 156.5,
+      exitPrice: 157.5,
+      notes: "t030-legacy",
+      snapshot: richSnapshot(baseSnap),
+    }),
+    closedTrade({
+      id: t030Id(2),
+      openedAt: at,
+      closedAt: at,
+      side: "long",
+      entryPrice: 156.5,
+      exitPrice: 155.5,
+      notes: "t030-malformed",
+      snapshot: richSnapshot({
+        ...baseSnap,
+        marketRegimeAnalysis: { version: 1, pair: "USD/JPY", candles: [{ time: at, open: 1, high: 1, low: 1, close: 1 }] } as never,
+      }),
+    }),
+  ];
+}
+
 export function settingsRow(now = Date.now()) {
   const at = new Date(now).toISOString();
   return {

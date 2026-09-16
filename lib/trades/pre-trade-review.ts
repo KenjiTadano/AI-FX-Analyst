@@ -19,12 +19,20 @@ import {
   formatPreTradeTriggerStatus,
   triggerStatusAtEntry,
 } from "./pre-trade-context";
+import {
+  ENTRY_CONTEXT_DISCLAIMER,
+  ENTRY_CONTEXT_EYEBROW,
+  ENTRY_CONTEXT_TITLE,
+  buildLiveEntryContext,
+  entryContextLabels,
+  type EntryContext,
+} from "./entry-context";
 import type { PreTradeContextSnapshot } from "./types";
+import type { MarketData } from "../market/types";
 
-export const PRE_TRADE_REVIEW_TITLE = "エントリー前の最終確認";
-export const PRE_TRADE_REVIEW_EYEBROW = "PRE-TRADE REVIEW";
-export const PRE_TRADE_REVIEW_DISCLAIMER =
-  "この表示はエントリー前の判断状況を確認するためのもので、売買を推奨・禁止するものではありません。";
+export const PRE_TRADE_REVIEW_TITLE = ENTRY_CONTEXT_TITLE;
+export const PRE_TRADE_REVIEW_EYEBROW = ENTRY_CONTEXT_EYEBROW;
+export const PRE_TRADE_REVIEW_DISCLAIMER = ENTRY_CONTEXT_DISCLAIMER;
 export const PRE_TRADE_REVIEW_TRIGGER_DISCLAIMER = TRIGGER_DISCLAIMER;
 export const PRE_TRADE_REVIEW_DISTANCE_DISCLAIMER = WATCH_DISTANCE_DISCLAIMER;
 export const PRE_TRADE_REVIEW_SAVE_ON = "この判断状況は取引登録時点の情報として保存されます";
@@ -58,6 +66,7 @@ export type PreTradeReviewModel = {
   tradeSide: "BUY" | "SELL";
   saveAnalysis: boolean;
   context: PreTradeContextSnapshot | null;
+  entryContext: EntryContext | null;
   direction: PreTradeContextSnapshot["direction"];
   action: PreTradeContextSnapshot["action"];
   readinessCount: string;
@@ -68,6 +77,12 @@ export type PreTradeReviewModel = {
   eventRisk: string;
   freshness: string;
   risk: string;
+  mtf: string;
+  htf: string;
+  regime: string;
+  regimeTrend: string;
+  volatility: string;
+  dll: string;
   warnings: PreTradeReviewWarning[];
   blocking: false;
   saveMessage: string;
@@ -187,6 +202,7 @@ export function buildPreTradeReview(input: {
   dailyPlan?: DailyTradingPlan | null;
   readiness?: EntryReadiness | null;
   saveAnalysis: boolean;
+  market?: MarketData | null;
 }): PreTradeReviewModel {
   const pair = input.pair;
   const tradeSide = tradeSideOf(input.tradeSide);
@@ -194,6 +210,15 @@ export function buildPreTradeReview(input: {
   const plan = input.dailyPlan && input.dailyPlan.pair === pair ? input.dailyPlan : null;
   const readiness = input.readiness && input.readiness.pair === pair ? input.readiness : null;
   const context = captureLivePreTradeContext({ pair, analysis, dailyPlan: plan, readiness });
+  const entryContext = buildLiveEntryContext({
+    pair,
+    capturedAt: analysis?.analyzedAt ?? plan?.analyzedAt ?? "1970-01-01T00:00:00.000Z",
+    analysis,
+    dailyPlan: plan,
+    readiness,
+    market: input.market ?? null,
+  });
+  const labels = entryContext ? entryContextLabels(entryContext) : null;
   const status = triggerStatusAtEntry(context);
   const distance = status === "not_met" ? context?.trigger?.evaluation.distanceToTriggerPips ?? null : null;
   const checkedAt = context?.trigger?.evaluation.checkedAt ?? null;
@@ -204,6 +229,7 @@ export function buildPreTradeReview(input: {
     tradeSide,
     saveAnalysis: input.saveAnalysis,
     context,
+    entryContext,
     direction: context?.direction ?? null,
     action: context?.action ?? null,
     readinessCount: context?.readiness ? `${context.readiness.confirmedCount} / ${context.readiness.totalCount}` : "—",
@@ -216,6 +242,12 @@ export function buildPreTradeReview(input: {
     risk: context?.risk
       ? `${context.risk.riskPerTrade.toLocaleString("ja-JP", { maximumFractionDigits: 2 })}円 / ${context.risk.riskPercent.toFixed(1)}%`
       : "未取得",
+    mtf: labels?.vsDirection ?? "未取得",
+    htf: labels?.htf ?? "未取得",
+    regime: labels && entryContext?.marketRegime ? labels.regime : "未取得",
+    regimeTrend: labels && entryContext?.marketRegime ? labels.regimeTrend : "未取得",
+    volatility: labels && entryContext?.marketRegime ? labels.volatility : "未取得",
+    dll: labels?.dll ?? "未設定/未取得",
     warnings,
     blocking: false,
     saveMessage: input.saveAnalysis ? PRE_TRADE_REVIEW_SAVE_ON : PRE_TRADE_REVIEW_SAVE_OFF,

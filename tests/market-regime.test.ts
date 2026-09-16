@@ -579,11 +579,9 @@ test("classifyVolatility thresholds", () => {
   assert.equal(classifyVolatility(1, 0), "unavailable");
 });
 
-test("snapshot and performance stay regime-free", () => {
-  const snapshot = readFileSync(join(ROOT, "lib/trades/snapshot.ts"), "utf8");
+test("MTF snapshot helper and performance stay regime-free", () => {
   const mtfSnap = readFileSync(join(ROOT, "lib/trades/mtf-snapshot.ts"), "utf8");
   const perf = readFileSync(join(ROOT, "lib/trades/mtf-performance.ts"), "utf8");
-  assert.doesNotMatch(snapshot, /marketRegimeAnalysis/);
   assert.doesNotMatch(mtfSnap, /marketRegimeAnalysis/);
   assert.doesNotMatch(perf, /marketRegimeAnalysis/);
 });

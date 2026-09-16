@@ -34,8 +34,8 @@ test.describe("pre-trade review", () => {
     await openDashboard(page, { analysis: "trigger-price-below", calendar: "empty", marketPrice: 156.18 });
     const form = await openTradeForm(page);
     await expect(form.getByTestId("pretrade-review")).toBeVisible();
-    await expect(form.getByText("PRE-TRADE REVIEW")).toBeVisible();
-    await expect(form.getByRole("heading", { name: "エントリー前の最終確認" })).toBeVisible();
+    await expect(form.getByText("ENTRY CONTEXT")).toBeVisible();
+    await expect(form.getByRole("heading", { name: "エントリー判断コンテキスト" })).toBeVisible();
     await expect(form.getByTestId("pretrade-review-disclaimer")).toBeVisible();
   });
 

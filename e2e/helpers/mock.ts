@@ -7,7 +7,7 @@ import { e2eAuthCookie, e2eAuthCookieName, e2eAuthCookieValue, e2eSession, e2eUs
 import { fundamentalFixture, type CalendarFixtureName } from "../fixtures/fundamental";
 import { E2E_USER_ID } from "../fixtures/ids";
 import { marketFixture, type MtfFixtureName, type RegimeFixtureName } from "../fixtures/market";
-import { performanceTrades, preTradeFullContextTrades, preTradePerformanceTrades, postTradeReviewTrades, mtfPerformanceTrades, settingsRow, tradeRows } from "../fixtures/trades";
+import { performanceTrades, preTradeFullContextTrades, preTradePerformanceTrades, postTradeReviewTrades, mtfPerformanceTrades, entryContextFixtureTrades, settingsRow, tradeRows } from "../fixtures/trades";
 
 const BLOCKED = [
   /openai\.com/i,
@@ -24,7 +24,7 @@ export type DashboardScenario = {
   analyses?: Partial<Record<Symbol, AnalysisFixtureName | "unavailable">>;
   dailyLossLimitPercent?: number | null;
   includeTrades?: boolean;
-  tradeSet?: "default" | "pretrade-performance" | "pretrade-full" | "posttrade-review" | "mtf-performance";
+  tradeSet?: "default" | "pretrade-performance" | "pretrade-full" | "posttrade-review" | "mtf-performance" | "entry-context";
   calendar?: CalendarFixtureName;
   marketPrice?: number;
   candleClose?: number;
@@ -79,6 +79,8 @@ export async function installDashboardMocks(page: Page, scenario: DashboardScena
   const now = Date.now();
   const trades = scenario.includeTrades === false
     ? []
+    : scenario.tradeSet === "entry-context"
+      ? entryContextFixtureTrades(now)
     : scenario.tradeSet === "mtf-performance"
       ? mtfPerformanceTrades(now)
     : scenario.tradeSet === "posttrade-review"

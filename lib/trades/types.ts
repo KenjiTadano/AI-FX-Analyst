@@ -2,6 +2,7 @@ import type { TradeSignal, AnalysisFactor, Availability } from "../ai/types";
 import type { ChartTrendDirection } from "../chart-analysis/types";
 import type { EntryTriggerEvaluationStatus, StructuredEntryTrigger } from "../ai/entry-trigger";
 import type { MultiTimeframeAnalysis } from "../market/multi-timeframe";
+import type { MarketRegimeAnalysis } from "../market/market-regime";
 
 export const pairs = ["USD/JPY", "EUR/JPY", "GBP/JPY"] as const;
 export type TradePair = (typeof pairs)[number];
@@ -123,6 +124,8 @@ export interface TradeAiAnalysisSnapshot extends TradeAnalysisSnapshot {
   entryTrigger?: StructuredEntryTrigger | null;
   preTradeContext?: PreTradeContextSnapshot | null;
   multiTimeframeAnalysis?: MultiTimeframeAnalysis | null;
+  /** Task030 optional sibling. Isolated fail-soft. Never a quality score. */
+  marketRegimeAnalysis?: MarketRegimeAnalysis | null;
 }
 
 export type AiAlignment = "aligned" | "contrary" | "wait_override" | "neutral" | "unavailable";

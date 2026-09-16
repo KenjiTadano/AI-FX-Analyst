@@ -12,6 +12,8 @@ import { buildPreTradeReview } from "@/lib/trades/pre-trade-review";
 import type { DailyTradingPlan } from "@/lib/trading-plan/daily-plan";
 import type { EntryReadiness } from "@/lib/trading-plan/entry-readiness";
 import { PreTradeReview } from "./pre-trade-review";
+import { captureMarketRegimeSnapshot } from "@/lib/trades/regime-snapshot";
+import { REGIME_LABEL, REGIME_TREND_LABEL, VOLATILITY_LABEL } from "@/lib/market/market-regime";
 import { dateTime, fromLocalDateTime, localDateTime, signalLabels } from "./format";
 
 interface Props {
@@ -83,6 +85,9 @@ export function TradeForm({ trade, mode, pair, rate, analysis, chartImageAnalysi
   const mtfPreview = mode === "new" && saveSnapshot
     ? captureMultiTimeframeSnapshot(market, fields.pair, market?.daily?.fetchedAt ?? market?.price.fetchedAt ?? new Date().toISOString())
     : null;
+  const regimePreview = mode === "new" && saveSnapshot
+    ? captureMarketRegimeSnapshot(market, fields.pair, market?.timeframes["1h"]?.fetchedAt ?? market?.price.fetchedAt ?? new Date().toISOString())
+    : null;
   const review = mode === "new"
     ? buildPreTradeReview({
       pair: fields.pair,
@@ -91,6 +96,7 @@ export function TradeForm({ trade, mode, pair, rate, analysis, chartImageAnalysi
       dailyPlan: source?.plan ?? null,
       readiness: source?.readiness ?? null,
       saveAnalysis: saveSnapshot,
+      market: market && market.symbol === fields.pair ? market : null,
     })
     : null;
 
@@ -114,6 +120,7 @@ export function TradeForm({ trade, mode, pair, rate, analysis, chartImageAnalysi
           <p>確信度：{live.confidence}% · 分析時刻：{dateTime(live.analyzedAt)}</p>
           <p>Chart：{chartPreview}</p>
           {mtfPreview && <p data-testid="mtf-snapshot-preview">市場構造：{TREND_LABEL[mtfPreview.higherTimeframeBias]} · {ALIGNMENT_LABEL[mtfPreview.alignment]}</p>}
+          {regimePreview && <p data-testid="regime-snapshot-preview">相場環境：{REGIME_LABEL[regimePreview.regime]} · {REGIME_TREND_LABEL[regimePreview.trendDirection]} · {VOLATILITY_LABEL[regimePreview.volatility]}</p>}
           {live.ai.status !== "available" && <p className="neutral">AI一部利用不可時の暫定分析です。</p>}
         </div>}
       </> : <p className="footnote">AI分析なし。スナップショットなしで記録できます。</p>}
