@@ -227,6 +227,7 @@ export async function installDashboardMocks(page: Page, scenario: DashboardScena
           ...previous,
           ...body,
           analysis_snapshot: previous.analysis_snapshot,
+          exit_plan: previous.exit_plan,
           version: (previous.version ?? 1) + 1,
         };
         rows[index] = next;

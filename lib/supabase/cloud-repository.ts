@@ -42,7 +42,7 @@ export function createCloudRepository(client: SupabaseClient<Database>, userId: 
     }),
     update: trade => attempt(async () => {
       const row = toTradeRow(trade, userId);
-      delete row.id; delete row.user_id; delete row.created_at; delete row.updated_at; delete row.analysis_snapshot;
+      delete row.id; delete row.user_id; delete row.created_at; delete row.updated_at; delete row.analysis_snapshot; delete row.exit_plan;
       const version = versions.get(trade.id); if (!version) throw new Error("reload");
       const { data, error } = await client.from("trades").update(row).eq("id", trade.id).eq("user_id", userId).eq("version", version).select().single();
       if (error || !data) throw new Error("update"); return mapped(data);

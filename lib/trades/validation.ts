@@ -1,5 +1,6 @@
 import { pairs, type Trade, type TradeDraft, type TradeAnalysisSnapshot, type Result } from "./types";
 import { pnl, validPrice, validQuantity } from "./calculations";
+import { sanitizeExitPlan } from "./exit-plan";
 import { sanitizePersistedSnapshot } from "./snapshot";
 const object = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
 export function validDate(v: unknown): v is string {
@@ -28,5 +29,6 @@ export function validateTrade(v: unknown): Result<Trade> {
   if (typeof v.id !== "string" || !v.id || v.id.length > 100 || !validDate(v.createdAt) || !validDate(v.updatedAt) || Date.parse(v.updatedAt) < Date.parse(v.createdAt) || (v.analysisSnapshot != null && (snapshot === null || !validSnapshot(snapshot)))) return { data: null, error: "記録のID・保存日時・AIスナップショットが不正です。" };
   const realizedPnl = draft.data.status === "closed" ? pnl(draft.data.side, draft.data.entryPrice, draft.data.exitPrice!, draft.data.quantity) : null;
   if (v.realizedPnl !== realizedPnl) return { data: null, error: "保存された損益と取引価格が一致しません。" };
-  return { data: { ...draft.data, id: v.id, createdAt: v.createdAt, updatedAt: v.updatedAt, analysisSnapshot: snapshot, realizedPnl }, error: null };
+  const exitPlan = v.exitPlan == null ? null : sanitizeExitPlan(v.exitPlan);
+  return { data: { ...draft.data, id: v.id, createdAt: v.createdAt, updatedAt: v.updatedAt, analysisSnapshot: snapshot, exitPlan, realizedPnl }, error: null };
 }

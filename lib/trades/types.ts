@@ -3,6 +3,7 @@ import type { ChartTrendDirection } from "../chart-analysis/types";
 import type { EntryTriggerEvaluationStatus, StructuredEntryTrigger } from "../ai/entry-trigger";
 import type { MultiTimeframeAnalysis } from "../market/multi-timeframe";
 import type { MarketRegimeAnalysis } from "../market/market-regime";
+import type { TradeExitPlan } from "./exit-plan";
 
 export const pairs = ["USD/JPY", "EUR/JPY", "GBP/JPY"] as const;
 export type TradePair = (typeof pairs)[number];
@@ -147,6 +148,8 @@ export interface Trade extends TradeDraft {
   id: string;
   realizedPnl: number | null;
   analysisSnapshot: TradeAnalysisSnapshot | TradeAiAnalysisSnapshot | null;
+  /** Task031 registration-time Exit Plan. Immutable after create. Optional for legacy. */
+  exitPlan?: TradeExitPlan | null;
   createdAt: string;
   updatedAt: string;
 }

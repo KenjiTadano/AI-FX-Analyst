@@ -1,3 +1,4 @@
+import { calculateRealizedR, formatRealizedR } from "./exit-plan";
 import { formatWatchDistancePips } from "../trading-plan/entry-trigger-watch";
 import {
   actionAtEntry,
@@ -28,6 +29,8 @@ export type PostTradeReviewModel = {
   tradeSide: "BUY" | "SELL";
   outcome: {
     realizedPnl: number | null;
+    realizedR: number | null;
+    realizedRLabel: string;
     result: PostTradeResult | null;
     resultLabel: string;
     holdingDurationMinutes: number | null;
@@ -128,6 +131,7 @@ export function buildPostTradeReview(trade: Trade): PostTradeReviewModel | null 
   const context = storedPreTradeContext(trade);
   const minutes = holdingDurationMinutes(trade.openedAt, trade.closedAt);
   const result = resultOf(trade.realizedPnl);
+  const realizedR = calculateRealizedR(trade);
   const distance = context?.trigger?.evaluation.status === "not_met"
     ? context.trigger.evaluation.distanceToTriggerPips
     : null;
@@ -136,6 +140,8 @@ export function buildPostTradeReview(trade: Trade): PostTradeReviewModel | null 
     tradeSide: trade.side === "short" ? "SELL" : "BUY",
     outcome: {
       realizedPnl: trade.realizedPnl,
+      realizedR,
+      realizedRLabel: formatRealizedR(realizedR),
       result,
       resultLabel: result ? RESULT_LABEL[result] : "—",
       holdingDurationMinutes: minutes,

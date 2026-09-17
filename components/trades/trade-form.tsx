@@ -13,8 +13,18 @@ import type { DailyTradingPlan } from "@/lib/trading-plan/daily-plan";
 import type { EntryReadiness } from "@/lib/trading-plan/entry-readiness";
 import { PreTradeReview } from "./pre-trade-review";
 import { captureMarketRegimeSnapshot } from "@/lib/trades/regime-snapshot";
+import {
+  EXIT_PLAN_PREFILL_NOTE,
+  aiScenarioPrefill,
+  createExitPlan,
+  exitPlanInputErrors,
+  formatPlannedRR,
+  formatRiskPips,
+} from "@/lib/trades/exit-plan";
 import { REGIME_LABEL, REGIME_TREND_LABEL, VOLATILITY_LABEL } from "@/lib/market/market-regime";
 import { dateTime, fromLocalDateTime, localDateTime, signalLabels } from "./format";
+
+const PREVIEW_AT = "2000-01-01T00:00:00.000Z";
 
 interface Props {
   trade: Trade | null;
@@ -30,29 +40,76 @@ interface Props {
 }
 
 export function TradeForm({ trade, mode, pair, rate, analysis, chartImageAnalysis = null, market = null, getPreTradeSource, onSave, onCancel }: Props) {
+  const initialSide = trade?.side ?? (analysis?.signal.includes("sell") ? "short" : "long");
+  const initialPrefill = mode === "new" ? aiScenarioPrefill(analysis, trade?.pair ?? pair, initialSide, trade?.entryPrice ?? rate) : null;
   const [fields, setFields] = useState(() => ({
     pair: trade?.pair ?? pair,
-    side: trade?.side ?? (analysis?.signal.includes("sell") ? "short" : "long"),
+    side: initialSide,
     entryPrice: String(trade?.entryPrice ?? rate ?? ""),
     quantity: String(trade?.quantity ?? ""),
     openedAt: localDateTime(trade?.openedAt ?? new Date().toISOString()),
-    stopLoss: String(trade?.stopLoss ?? ""),
-    takeProfit: String(trade?.takeProfit ?? ""),
+    stopLoss: String(trade?.stopLoss ?? initialPrefill?.stopLoss ?? ""),
+    takeProfit: String(trade?.takeProfit ?? initialPrefill?.takeProfit ?? ""),
     notes: trade?.notes ?? "",
     exitPrice: String(trade?.exitPrice ?? ""),
     closedAt: localDateTime(trade?.closedAt ?? new Date().toISOString()),
   }));
+  const [planDirty, setPlanDirty] = useState(false);
+  const [usedAiPrefill, setUsedAiPrefill] = useState(!!initialPrefill);
   const [saveSnapshot, setSaveSnapshot] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const isClosed = mode === "close" || trade?.status === "closed";
-  function update(key: keyof typeof fields, value: string) { setFields(previous => ({ ...previous, [key]: value })); }
-  function input(key: keyof typeof fields, label: string, type = "number", optional = false) {
-    return <label>{label}<input type={type} required={!optional} step={type === "number" ? "any" : undefined} min={type === "number" ? "0" : undefined} value={fields[key]} onChange={e => update(key, e.target.value)} /></label>;
+  const numeric = (s: string) => s.trim() ? Number(s) : NaN;
+  function update(key: keyof typeof fields, value: string) {
+    const nextDirty = planDirty || key === "stopLoss" || key === "takeProfit";
+    if (nextDirty !== planDirty) setPlanDirty(nextDirty);
+    setFields(previous => {
+      const next = { ...previous, [key]: value };
+      if ((key === "pair" || key === "side") && !nextDirty) {
+        const prefill = aiScenarioPrefill(analysis, next.pair, next.side as "long" | "short", numeric(next.entryPrice));
+        setUsedAiPrefill(!!prefill);
+        next.stopLoss = prefill ? String(prefill.stopLoss) : "";
+        next.takeProfit = prefill?.takeProfit != null ? String(prefill.takeProfit) : "";
+      }
+      return next;
+    });
   }
+  function input(key: keyof typeof fields, label: string, type = "number", optional = false, testId?: string, fieldError?: string | null) {
+    return <div>
+      <label>{label}<input data-testid={testId} type={type} required={!optional} step={type === "number" ? "any" : undefined} min={type === "number" ? "0" : undefined} value={fields[key]} aria-invalid={fieldError ? true : undefined} onChange={e => update(key, e.target.value)} /></label>
+      {fieldError && <span role="alert" className="field-error" data-testid={testId ? `${testId}-error` : undefined}>{fieldError}</span>}
+    </div>;
+  }
+  const draftStop = fields.stopLoss.trim() ? numeric(fields.stopLoss) : null;
+  const draftTake = fields.takeProfit.trim() ? numeric(fields.takeProfit) : null;
+  const planErrors = mode === "new"
+    ? exitPlanInputErrors({
+      pair: fields.pair,
+      side: fields.side as TradeDraft["side"],
+      entryPrice: numeric(fields.entryPrice),
+      stopLoss: draftStop,
+      takeProfit: draftTake,
+      capturedAt: PREVIEW_AT,
+    })
+    : { stopLoss: null, takeProfit: null };
+  const preview = mode === "new"
+    ? createExitPlan({
+      pair: fields.pair,
+      side: fields.side as TradeDraft["side"],
+      entryPrice: numeric(fields.entryPrice),
+      stopLoss: planErrors.stopLoss ? null : draftStop,
+      takeProfit: planErrors.takeProfit ? null : draftTake,
+      capturedAt: PREVIEW_AT,
+    })
+    : null;
   async function submit(e: FormEvent) {
     e.preventDefault(); if (busy) return; setBusy(true);
-    const numeric = (s: string) => s.trim() ? Number(s) : NaN;
+    if (mode === "new" && (planErrors.stopLoss || planErrors.takeProfit)) {
+      setError(planErrors.stopLoss ?? planErrors.takeProfit);
+      setBusy(false);
+      return;
+    }
     const draft: TradeDraft = {
       pair: fields.pair as TradeDraft["pair"],
       side: fields.side as TradeDraft["side"],
@@ -106,10 +163,24 @@ export function TradeForm({ trade, mode, pair, rate, analysis, chartImageAnalysi
     {mode !== "close" ? <div className="journal-fields">
       <label>記録する通貨ペア<select value={fields.pair} onChange={e => update("pair", e.target.value)}>{pairs.map(p => <option key={p}>{p}</option>)}</select></label>
       <label>売買方向<select value={fields.side} onChange={e => update("side", e.target.value)}><option value="long">買い / Long</option><option value="short">売り / Short</option></select></label>
-      {input("entryPrice", "エントリー価格")}{input("quantity", "取引数量（通貨）")}{input("openedAt", "エントリー日時（JST）", "datetime-local")}{input("stopLoss", "損切り価格（任意）", "number", true)}{input("takeProfit", "利益確定価格（任意）", "number", true)}
+      {input("entryPrice", "エントリー価格")}{input("quantity", "取引数量（通貨）")}{input("openedAt", "エントリー日時（JST）", "datetime-local")}
+      {input("stopLoss", mode === "new" ? "初期損切り" : "損切り価格（任意）", "number", true, "exit-plan-sl-field", planErrors.stopLoss)}
+      {input("takeProfit", mode === "new" ? "初期利確" : "利益確定価格（任意）", "number", true, "exit-plan-tp-field", planErrors.takeProfit)}
       <label className="journal-wide">メモ<textarea maxLength={4000} rows={3} value={fields.notes} onChange={e => update("notes", e.target.value)} /></label>
     </div> : <p className="footnote">{trade?.pair} · {trade?.side === "long" ? "Long" : "Short"} · {trade?.quantity.toLocaleString()}通貨 · Entry {trade?.entryPrice}</p>}
     {isClosed && <div className="journal-fields">{input("exitPrice", "決済価格")}{input("closedAt", "決済日時（JST）", "datetime-local")}</div>}
+
+    {mode === "new" && <section className="exit-plan-preview" data-testid="exit-plan-preview" aria-label="Exit Plan">
+      <p className="eyebrow">EXIT PLAN</p>
+      <h4>Exit Plan</h4>
+      {usedAiPrefill && <p className="footnote" data-testid="exit-plan-prefill-note">{EXIT_PLAN_PREFILL_NOTE}</p>}
+      <dl className="exit-plan-grid">
+        <div><dt>初期リスク</dt><dd data-testid="exit-plan-preview-risk">{preview ? formatRiskPips(preview.initialRiskPips) : "—"}</dd></div>
+        <div><dt>計画R:R</dt><dd data-testid="exit-plan-preview-rr">{preview ? formatPlannedRR(preview.plannedRewardRiskRatio) : "—"}</dd></div>
+      </dl>
+      <p className="footnote">登録時の値幅計画です。取引の良し悪しや推奨を示すものではありません。</p>
+    </section>}
+    {mode === "edit" && <p className="footnote">登録時のExit Planは変更しません。</p>}
 
     {mode === "new" && <section className="snapshot-preview" aria-label="保存するAI分析">
       {live ? <>

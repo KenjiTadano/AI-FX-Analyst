@@ -219,7 +219,7 @@ h2 { font-size: 17px; font-weight: 600; margin-top: 4px; }
 .journal-form, .delete-confirm { padding: 24px; background: #101a28; border: 1px solid #47646e; border-radius: 12px; }
 .journal-form h3, .trade-record h3, .performance-cards h3 { font-size: 15px; }
 .journal-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 20px 0; }
-.journal-fields label, .calendar-controls label { font-size: 12px; color: var(--muted); min-width: 0; }
+.journal-fields label, .journal-fields > div, .calendar-controls label { font-size: 12px; color: var(--muted); min-width: 0; }
 .journal-shell input, .journal-shell select, .journal-shell textarea { display: block; width: 100%; min-width: 0; max-width: 100%; padding: 12px; margin: 6px 0 0; font-size: 16px; color: var(--foreground); border: 1px solid #405169; border-radius: 6px; background: #0d1623; }
 .journal-actions { margin-top: 16px; }
 .trade-list { display: grid; gap: 16px; }
@@ -388,6 +388,22 @@ h2 { font-size: 17px; font-weight: 600; margin-top: 4px; }
 .posttrade-review-labels { margin-top: 12px; min-width: 0; }
 .posttrade-review-labels p { margin: 0 0 6px; font-size: 13px; }
 .posttrade-review-labels ul { margin: 0; padding-left: 1.2em; font-size: 13px; line-height: 1.7; overflow-wrap: anywhere; }
+.exit-plan, .exit-plan-preview { margin-top: 12px; padding: 14px; border: 1px solid var(--border); border-radius: 10px; background: #0d1623; min-width: 0; }
+.exit-plan h4, .exit-plan-preview h4 { margin: 0 0 8px; font-size: 14px; overflow-wrap: anywhere; }
+.exit-plan-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px 12px; margin: 8px 0; min-width: 0; }
+.exit-plan-grid > div { min-width: 0; }
+.exit-plan-grid dt { color: var(--muted); font-size: 11px; }
+.exit-plan-grid dd { margin: 2px 0 0; overflow-wrap: anywhere; }
+.field-error { display: block; margin-top: 4px; color: var(--negative); font-size: 12px; overflow-wrap: anywhere; }
+@media (min-width: 720px) {
+  .exit-plan-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (min-width: 1280px) {
+  .exit-plan-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (max-width: 540px) {
+  .exit-plan-grid { grid-template-columns: minmax(0, 1fr); }
+}
 @media (min-width: 800px) {
   .posttrade-review-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }

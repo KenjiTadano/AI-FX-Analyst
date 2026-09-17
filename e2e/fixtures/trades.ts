@@ -1,5 +1,6 @@
 import type { PreTradeContextSnapshot, TradeAiAnalysisSnapshot, Trade } from "../../lib/trades/types";
 import { pnl } from "../../lib/trades/calculations";
+import { createExitPlan } from "../../lib/trades/exit-plan";
 import { E2E_USER_ID, TRADE_IDS, daysAgo, iso, localDayOffset } from "./ids";
 import type { TradeSignal } from "../../lib/ai/types";
 import type { HigherTimeframeBias, MultiTimeframeAnalysis, TimeframeAlignment, TimeframeAnalysis, TimeframeTrend } from "../../lib/market/multi-timeframe";
@@ -87,6 +88,22 @@ function closedTrade(args: {
   };
 }
 
+function withExitPlan(trade: Trade, stopLoss: number, takeProfit: number | null): Trade {
+  return {
+    ...trade,
+    stopLoss,
+    takeProfit,
+    exitPlan: createExitPlan({
+      pair: trade.pair,
+      side: trade.side,
+      entryPrice: trade.entryPrice,
+      stopLoss,
+      takeProfit,
+      capturedAt: trade.createdAt,
+    }),
+  };
+}
+
 export function performanceTrades(now = Date.now()): Trade[] {
   const today = localDayOffset(0, 10, new Date(now));
   const yesterday = localDayOffset(-1, 15, new Date(now));
@@ -121,14 +138,14 @@ export function performanceTrades(now = Date.now()): Trade[] {
       exitPrice: 157.3,
       snapshot: richSnapshot({ analyzedAt: today, capturedAt: today, expiresAt: today }),
     }),
-    closedTrade({
+    withExitPlan(closedTrade({
       id: TRADE_IDS.yesterdayClosed,
       openedAt: yesterday,
       closedAt: yesterday,
       side: "short",
       entryPrice: 156.5,
       exitPrice: 156.1,
-    }),
+    }), 156.8, 156.1),
     closedTrade({
       id: TRADE_IDS.recentClosed,
       openedAt: recent,
@@ -146,14 +163,14 @@ export function performanceTrades(now = Date.now()): Trade[] {
         marketPrice: 156.5,
       }),
     }),
-    closedTrade({
+    withExitPlan(closedTrade({
       id: TRADE_IDS.monthClosed,
       openedAt: month,
       closedAt: month,
       side: "long",
       entryPrice: 156.2,
       exitPrice: 156.5,
-    }),
+    }), 155.9, 156.8),
     closedTrade({
       id: TRADE_IDS.oldClosed,
       openedAt: old,
@@ -456,6 +473,18 @@ export function postTradeReviewTrades(now = Date.now()): Trade[] {
         preTradeContext: mismatch,
       }),
     }),
+    {
+      ...closedTrade({
+        id: t025Id(13),
+        openedAt: hold35Open,
+        closedAt,
+        side: "short",
+        entryPrice: 156.5,
+        exitPrice: 156.0,
+        notes: "t031-malformed",
+      }),
+      exitPlan: { version: 1, pair: "USD/JPY" } as Trade["exitPlan"],
+    },
   ];
 }
 
@@ -695,6 +724,7 @@ export function tradeRows(trades: Trade[]) {
     realized_pnl: trade.realizedPnl,
     notes: trade.notes,
     analysis_snapshot: trade.analysisSnapshot,
+    exit_plan: trade.exitPlan ?? null,
     local_trade_id: null,
     created_at: trade.createdAt,
     updated_at: trade.updatedAt,

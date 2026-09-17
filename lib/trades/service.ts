@@ -5,6 +5,7 @@ import type { DailyTradingPlan } from "../trading-plan/daily-plan";
 import type { EntryReadiness } from "../trading-plan/entry-readiness";
 import { buildEntryTriggerWatch } from "../trading-plan/entry-trigger-watch";
 import { pnl } from "./calculations";
+import { createExitPlan } from "./exit-plan";
 import { captureTradeAiSnapshot } from "./snapshot";
 import { validateDraft, validateTrade } from "./validation";
 import type { Result, Trade, TradeAnalysisSnapshot, TradeDraft } from "./types";
@@ -57,12 +58,28 @@ export function createTrade(draft: TradeDraft, analysis: AIAnalysis | null, id: 
       distanceToTriggerPips: distanceFromReadiness(draft.pair, options?.readiness),
       market: options?.market ?? null,
     }),
+    exitPlan: createExitPlan({
+      pair: checked.data.pair,
+      side: checked.data.side,
+      entryPrice: checked.data.entryPrice,
+      stopLoss: checked.data.stopLoss,
+      takeProfit: checked.data.takeProfit,
+      capturedAt: now,
+    }),
   });
 }
 
 export function editTrade(trade: Trade, draft: TradeDraft, now: string): Result<Trade> {
   // Entry edits never replace the registration-time analysis, even if the pair changes.
-  return validateTrade({ ...draft, id: trade.id, createdAt: trade.createdAt, updatedAt: now, analysisSnapshot: trade.analysisSnapshot, realizedPnl: draft.status === "closed" ? pnl(draft.side, draft.entryPrice, draft.exitPrice!, draft.quantity) : null });
+  return validateTrade({
+    ...draft,
+    id: trade.id,
+    createdAt: trade.createdAt,
+    updatedAt: now,
+    analysisSnapshot: trade.analysisSnapshot,
+    exitPlan: trade.exitPlan ?? null,
+    realizedPnl: draft.status === "closed" ? pnl(draft.side, draft.entryPrice, draft.exitPrice!, draft.quantity) : null,
+  });
 }
 
 export function closeTrade(trade: Trade, exitPrice: number, closedAt: string, now: string): Result<Trade> {

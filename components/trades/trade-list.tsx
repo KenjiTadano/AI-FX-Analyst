@@ -4,6 +4,7 @@ import { alignmentLabels, computeAiAlignment, isRichSnapshot } from "@/lib/trade
 import { actionGuidanceLabel, directionBiasLabel, signalLabels as decisionLabels } from "@/lib/ai/decision-ui";
 import { dateTime, money, signalLabels, tone } from "./format";
 import { StoredEntryContext } from "./entry-context";
+import { ExitPlanDetail } from "./exit-plan";
 import { PostTradeReview } from "./post-trade-review";
 
 export function TradeList({ trades, quote, now, onEdit, onClose, onDelete }: { trades: Trade[]; quote: Quote | null; now: number; onEdit?: (t: Trade) => void; onClose?: (t: Trade) => void; onDelete?: (t: Trade) => void }) {
@@ -50,6 +51,7 @@ export function TradeList({ trades, quote, now, onEdit, onClose, onDelete }: { t
           {trade.status !== "closed" && <StoredEntryContext trade={trade} />}
         </div>
       </details> : trade.status !== "closed" ? <><p className="footnote">エントリー時AI分析：保存なし</p><StoredEntryContext trade={trade} /></> : <p className="footnote">エントリー時AI分析：保存なし</p>}
+      {trade.status !== "closed" && <ExitPlanDetail trade={trade} />}
       {trade.status === "closed" && <PostTradeReview trade={trade} />}
       {trade.notes && <p className="trade-notes">{trade.notes}</p>}
       {(onEdit || onClose || onDelete) && <div className="journal-actions">{trade.status === "open" && onClose && <button onClick={() => onClose(trade)}>決済を記録</button>}{onEdit && <button onClick={() => onEdit(trade)}>編集</button>}{onDelete && <button className="negative" onClick={() => onDelete(trade)}>削除</button>}</div>}

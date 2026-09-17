@@ -8,6 +8,7 @@ import {
 } from "@/lib/trades/post-trade-review";
 import type { Trade } from "@/lib/trades/types";
 import { StoredEntryContext } from "./entry-context";
+import { ExitPlanDetail } from "./exit-plan";
 import { money, tone } from "./format";
 
 function row(label: string, value: string, testId: string, valueClass?: string) {
@@ -33,9 +34,11 @@ export function PostTradeReview({ trade }: { trade: Trade }) {
           "post-trade-review-pnl",
           pnl == null || !Number.isFinite(pnl) ? "muted" : tone(pnl),
         )}
+        {row("実現R", review.outcome.realizedRLabel, "post-trade-review-realized-r")}
         {row("結果", review.outcome.resultLabel, "post-trade-review-result")}
         {row("保有時間", review.outcome.holdingDurationLabel, "post-trade-review-duration")}
       </dl>
+      <ExitPlanDetail trade={trade} />
       <p className="footnote">エントリー時の判断状況</p>
       {review.contextState === "unreadable" && (
         <p className="footnote" data-testid="post-trade-review-unreadable">{POST_TRADE_REVIEW_UNREADABLE}</p>

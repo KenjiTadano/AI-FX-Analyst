@@ -1,6 +1,7 @@
 "use client";
 import { useMemo, useState } from "react";
 import { alignmentPerformance, chartEvidencePerformance, confidenceBandPerformance, dailyPnl, dayKey, equityCurve, monthCells, pairPerformance, signalPerformance, summarize } from "@/lib/trades/analytics";
+import { formatRCoverage, formatRealizedR, summarizeRPerformance } from "@/lib/trades/exit-plan";
 import { MIN_INSIGHT_SAMPLE_SIZE } from "@/lib/trades/insights";
 import { PERFORMANCE_PERIODS, filterTradesByPeriod, periodLabel, periodTradeCounts, type PerformancePeriod } from "@/lib/trades/performance-period";
 import { alignmentLabels } from "@/lib/trades/snapshot";
@@ -25,6 +26,7 @@ export function Performance({ trades, initialBalance }: { trades: Trade[]; initi
   const counts = useMemo(() => periodTradeCounts(filteredTrades), [filteredTrades]);
   const allStats = useMemo(() => summarize(trades), [trades]);
   const stats = useMemo(() => summarize(filteredTrades), [filteredTrades]);
+  const rStats = useMemo(() => summarizeRPerformance(filteredTrades), [filteredTrades]);
   const days = useMemo(() => dailyPnl(filteredTrades), [filteredTrades]);
   const curve = useMemo(() => equityCurve(filteredTrades, initialBalance), [filteredTrades, initialBalance]);
   const periodAvg = stats.count ? stats.totalPnl / stats.count : null;
@@ -90,8 +92,9 @@ export function Performance({ trades, initialBalance }: { trades: Trade[]; initi
           <p className="footnote">集計対象：{label}</p>
           <div className="journal-stats">{([
             ["総損益", money(stats.totalPnl, true)], ["総取引数（決済済み）", `${stats.count}件`], ["勝ち / 負け / 引分", `${stats.wins} / ${stats.losses} / ${stats.draws}`], ["勝率", stats.winRate === null ? "—" : `${stats.winRate.toFixed(1)}%`], ["平均利益", money(stats.averageProfit)], ["平均損失", money(stats.averageLoss)], ["Profit Factor", stats.profitFactor === null ? stats.noLosses ? "損失なし" : "—" : stats.profitFactor.toFixed(2)], ["最大利益", money(stats.maxProfit)], ["最大損失", money(stats.maxLoss)], ["平均予定RR", stats.averageRiskReward === null ? "未算出" : `1 : ${stats.averageRiskReward.toFixed(2)}`],
-          ] as const).map(([labelText, value]) => <div key={labelText}><span>{labelText}</span><strong data-testid={labelText === "総損益" ? "journal-total-pnl" : undefined}>{value}</strong></div>)}</div>
-          <p className="footnote">勝率 = 勝ち数 ÷ 決済済み件数（引き分けを含む）。平均予定RRは登録されたEntry・損切り・利確から計算できる{stats.riskRewardSamples}件が対象です。手数料・スワップ等は未計上です。</p>
+            ["R Coverage", formatRCoverage(rStats)], ["Average R", formatRealizedR(rStats.averageR)], ["Total R", formatRealizedR(rStats.totalR)],
+          ] as const).map(([labelText, value]) => <div key={labelText}><span>{labelText}</span><strong data-testid={labelText === "総損益" ? "journal-total-pnl" : labelText === "R Coverage" ? "r-coverage" : labelText === "Average R" ? "average-r" : labelText === "Total R" ? "total-r" : undefined}>{value}</strong></div>)}</div>
+          <p className="footnote">勝率 = 勝ち数 ÷ 決済済み件数（引き分けを含む）。平均予定RRは登録されたEntry・損切り・利確から計算できる{stats.riskRewardSamples}件が対象です。R Coverageは決済済みのうち登録時Exit Planから実現Rを算出できた件数です。手数料・スワップ等は未計上です。</p>
         </Panel>
         <Panel title="資産推移" eyebrow="REALIZED EQUITY" className="journal-wide">
           <p className="footnote">Task006の設定資産 {money(Number.isFinite(initialBalance) ? initialBalance : null)} を基準に、決済損益を日時順に加算した参考推移です（{label}）。口座残高への自動反映はありません。</p>

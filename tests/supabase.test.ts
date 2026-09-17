@@ -102,7 +102,7 @@ test("create edit close delete return only acknowledged database state", async (
   assert.equal((await f.repository.create(trade())).data?.id, id);
   const edited = { ...trade(), notes: "edited" };
   assert.equal((await f.repository.update(edited)).data?.notes, "edited");
-  assert.equal("analysis_snapshot" in f.state.writes[0], false); assert.equal("user_id" in f.state.writes[0], false);
+  assert.equal("analysis_snapshot" in f.state.writes[0], false); assert.equal("exit_plan" in f.state.writes[0], false); assert.equal("user_id" in f.state.writes[0], false);
   const closed = closeTrade(edited, 154, now, now).data!;
   assert.equal((await f.repository.update(closed)).data?.realizedPnl, 500);
   assert.equal((await f.repository.remove(closed)).data, true); assert.equal(f.state.rows.length, 0);
