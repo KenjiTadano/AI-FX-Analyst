@@ -16,7 +16,7 @@ export type ChartProviderConfig = TextProviderConfig & {
   imageCapable: boolean;
 };
 
-type Env = Record<string, string | undefined>;
+export type Env = Record<string, string | undefined>;
 
 function clean(value: string | undefined): string {
   return value?.trim() ?? "";

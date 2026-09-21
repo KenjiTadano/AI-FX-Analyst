@@ -335,6 +335,14 @@ export function AIExplanation({ response }: { response: AnalysisResponse | null 
           {data.dataQuality.macroeconomicData && <span className="badge">米国マクロ · {data.dataQuality.macroeconomicData.status === "ok" ? "OK" : data.dataQuality.macroeconomicData.status === "partial" ? "Partial" : "Missing"}</span>}
           {data.chartEvidence?.used && <span className="badge positive">チャート画像 · 使用</span>}
         </div>
+        <details className="ai-provider-meta">
+          <summary>AI Provider / Model</summary>
+          <p className="footnote" data-testid="ai-provider">AI Provider: {data.ai.provider ?? "—"}</p>
+          <p className="footnote" data-testid="ai-requested-model">Requested model: {data.ai.requestedModel ?? "—"}</p>
+          <p className="footnote" data-testid="ai-actual-model">Actual model: {data.ai.actualModel ?? data.ai.model ?? "—"}</p>
+          {data.ai.fallbackUsed ? <p className="footnote" data-testid="ai-fallback-used">Fallback: OpenAI を使用</p> : null}
+          {data.ai.latencyMs != null ? <p className="footnote" data-testid="ai-latency">Latency: {data.ai.latencyMs} ms</p> : null}
+        </details>
       </>}
     </Panel>
     <Panel title="判断条件と注意点" eyebrow="DECISION & RISK NOTES" className="commentary-panel">

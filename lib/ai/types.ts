@@ -110,7 +110,19 @@ export interface AIAnalysis {
   analyzedAt: string;
   expiresAt: string;
   decisionReasons: string[];
-  ai: { status: "available" | "unavailable" | "error"; model: string | null; code: AIErrorCode | null; message: string | null };
+  ai: {
+    status: "available" | "unavailable" | "error";
+    model: string | null;
+    code: AIErrorCode | null;
+    message: string | null;
+    /** Who answered (or last attempted on failure). */
+    provider?: "openai" | "openrouter" | null;
+    requestedModel?: string | null;
+    /** Upstream response.model when present (e.g. openrouter/free may differ). */
+    actualModel?: string | null;
+    fallbackUsed?: boolean;
+    latencyMs?: number | null;
+  };
   /** Present only when a validated ChartImageAnalysis was attached for this run. */
   chartEvidence?: { used: true; timeframe: string | null; trend: ChartImageAnalysis["trend"]["direction"]; qualityScore: number } | null;
   /** Sanitized structured trigger. Invalid/unstructurable conditions become null. */

@@ -194,17 +194,35 @@ function extractModelText(body: unknown): string | null {
   return texts[0] ?? null;
 }
 
-export function createOpenAI(config: {
+/** Safe model id from upstream JSON. Never logs or returns secrets. */
+export function extractResponseModel(body: unknown): string | null {
+  if (!isRecord(body) || typeof body.model !== "string") return null;
+  const model = body.model.trim();
+  if (!model || model.length > 200) return null;
+  if (/sk-|api[_-]?key|bearer\s/i.test(model)) return null;
+  return model;
+}
+
+export type OpenAICallerConfig = {
   apiKey: string;
   model: string;
   timeoutMs?: number;
   url?: string;
   transport?: AiTransport;
-}, fetcher: typeof fetch = fetch) {
+  provider?: "openai" | "openrouter";
+};
+
+/**
+ * Single upstream request. No retries. Returns validated interpretation + safe metadata.
+ * Keep createOpenAI() as the ModelInterpretation-only adapter for existing tests.
+ */
+export function createOpenAICaller(config: OpenAICallerConfig, fetcher: typeof fetch = fetch) {
   const url = config.url ?? "https://api.openai.com/v1/responses";
   const transport = config.transport ?? "responses";
-  return async (input: AnalysisInput): Promise<ModelInterpretation> => {
+  const provider = config.provider ?? "openai";
+  return async (input: AnalysisInput): Promise<{ interpretation: ModelInterpretation; actualModel: string | null; latencyMs: number; requestedModel: string }> => {
     if (!config.apiKey || !config.model) throw new AnalysisError("not_configured");
+    const started = Date.now();
     const userPayload = JSON.stringify({ ...input, eventRisk: { ...input.eventRisk, events: undefined, reasons: input.eventRisk.reasons.slice(0, 20) } });
     const body = transport === "chat"
       ? {
@@ -233,19 +251,26 @@ export function createOpenAI(config: {
     }
     try {
       const payload: unknown = await response.json();
+      const actualModel = extractResponseModel(payload);
       const text = extractModelText(payload);
       if (!text) throw new AnalysisError("invalid_response", "output_text_count:0");
       if (text.length > 25_000) throw new AnalysisError("invalid_response", "output_text_too_large");
       let parsed: unknown;
       try { parsed = JSON.parse(stripFence(text)); }
       catch { throw new AnalysisError("invalid_response", "json_parse_failed"); }
-      return validateInterpretation(parsed, input);
+      return {
+        interpretation: validateInterpretation(parsed, input),
+        actualModel,
+        latencyMs: Math.max(0, Date.now() - started),
+        requestedModel: config.model,
+      };
     } catch (error) {
       if (error instanceof AnalysisError) {
         if (error.code === "invalid_response" && error.detail && shouldExposeValidationDetail()) {
           // Safe diagnostics only: field-level reason codes, never prompts/keys/images.
           console.warn("[ai] invalid_response", {
             detail: error.detail,
+            provider,
             expected: "ModelInterpretation matching interpretationSchema + grounded evidenceIds",
             hint: error.detail.includes("factors_count")
               ? "factors must be exactly 5 unique categories"
@@ -261,4 +286,15 @@ export function createOpenAI(config: {
       throw new AnalysisError("invalid_response", "unexpected_parse_error");
     }
   };
+}
+
+export function createOpenAI(config: {
+  apiKey: string;
+  model: string;
+  timeoutMs?: number;
+  url?: string;
+  transport?: AiTransport;
+}, fetcher: typeof fetch = fetch) {
+  const call = createOpenAICaller(config, fetcher);
+  return async (input: AnalysisInput): Promise<ModelInterpretation> => (await call(input)).interpretation;
 }

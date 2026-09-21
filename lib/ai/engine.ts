@@ -16,11 +16,22 @@ export const aiMessages: Record<AIErrorCode, string> = {
 };
 
 /** Provider-aware user message. Never include secret values or env variable names. */
-export function aiMessage(code: AIErrorCode, provider: AiProviderName = "openai"): string {
+export function aiMessage(code: AIErrorCode, provider: AiProviderName = "openai", detail?: string | null): string {
   if (code === "not_configured") {
     return provider === "openrouter"
       ? "OpenRouter API設定が不足しています。テクニカル評価のみ表示しています。"
       : "OpenAI API設定が不足しています。テクニカル評価のみ表示しています。";
+  }
+  if (code === "rate_limited") {
+    const retry = detail?.match(/retry_after_(\d+)/)?.[1];
+    return retry
+      ? `AIの利用上限に達しました（約${retry}秒後に再試行できます）。テクニカル評価のみ表示しています。自動再試行はしません。`
+      : "AIの利用上限に達しました。テクニカル評価のみ表示しています。自動再試行はしません。";
+  }
+  if (code === "api_error" && detail?.includes("http_402")) {
+    return provider === "openrouter"
+      ? "OpenRouterの利用枠または課金状態のためAIを取得できません。テクニカル評価のみ表示しています。"
+      : "AIプロバイダの利用枠または課金状態のためAIを取得できません。テクニカル評価のみ表示しています。";
   }
   return aiMessages[code];
 }
@@ -28,7 +39,25 @@ export function aiMessage(code: AIErrorCode, provider: AiProviderName = "openai"
 export function signalFromScore(score: number): TradeSignal {
   return score >= 60 ? "strong_buy" : score >= 20 ? "buy" : score <= -60 ? "strong_sell" : score <= -20 ? "sell" : "wait";
 }
-export function finalizeAnalysis(input: AnalysisInput, interpretation: ModelInterpretation | null, model: string, error: AIErrorCode | null, now = Date.now(), provider: AiProviderName = "openai"): AIAnalysis {
+
+export type FinalizeAiMeta = {
+  provider?: AiProviderName;
+  requestedModel?: string | null;
+  actualModel?: string | null;
+  fallbackUsed?: boolean;
+  latencyMs?: number | null;
+  detail?: string | null;
+};
+
+export function finalizeAnalysis(
+  input: AnalysisInput,
+  interpretation: ModelInterpretation | null,
+  model: string,
+  error: AIErrorCode | null,
+  now = Date.now(),
+  provider: AiProviderName = "openai",
+  meta: FinalizeAiMeta = {},
+): AIAnalysis {
   const technical = input.technicalAnalysis;
   const calendarRisk = input.eventRisk.events ? riskState(input.eventRisk.events, now) : input.eventRisk;
   const economicBlocked = calendarRisk.imminent || calendarRisk.uncertainTime || input.eventRisk.imminent || input.eventRisk.uncertainTime;
@@ -45,7 +74,8 @@ export function finalizeAnalysis(input: AnalysisInput, interpretation: ModelInte
   const overextendedRsi = technical.frames.some(frame => ["oversold", "overbought"].includes(frame.rsiState));
   const confidence = aiReady ? Math.max(0, Math.round(Math.min(interpretation.confidence, input.dataAvailability.score, 90) - (contradictory ? 20 : 0) - (overextendedRsi ? 8 : 0) - (economicBlocked ? 15 : 0))) : Math.min(35, input.dataAvailability.score);
   const decisionReasons: string[] = [];
-  if (!aiReady) decisionReasons.push(aiMessage(error ?? "api_error", provider));
+  const messageProvider = meta.provider ?? provider;
+  if (!aiReady) decisionReasons.push(aiMessage(error ?? "api_error", messageProvider, meta.detail));
   if (!technical.ready) decisionReasons.push("新鮮なレートと十分な2時間軸以上の確定足が必要です。");
   if (input.dataAvailability.score < 60) decisionReasons.push("データ充足率が60%未満のため待機します。");
   if (confidence < 55) decisionReasons.push("確信度が55%未満のため待機します。");
@@ -66,13 +96,24 @@ export function finalizeAnalysis(input: AnalysisInput, interpretation: ModelInte
   const riskAt = input.eventRisk.nextRiskAt ? Date.parse(input.eventRisk.nextRiskAt) : Number.POSITIVE_INFINITY;
   const boundary = "nextBoundaryAt" in calendarRisk && calendarRisk.nextBoundaryAt ? Date.parse(calendarRisk.nextBoundaryAt) : Infinity;
   const expiresAt = Math.min(defaultExpiry, riskAt > now ? riskAt : defaultExpiry, boundary > now ? boundary : defaultExpiry);
+  const displayModel = aiReady ? (meta.actualModel ?? meta.requestedModel ?? (model || null)) : null;
   return {
     pair: input.pair, signal, directionSignal: signalFromScore(score), action: signal === "wait" ? "WAIT" : signal.includes("buy") ? "BUY" : "SELL", economicRisk: { active: calendarRisk.imminent, known: input.eventRisk.known ?? false, reasons: calendarRisk.reasons, nextHigh: nextHigh(input.eventRisk.events ?? [], now) }, score, technicalScore: technical.score, confidence,
     summary: aiReady ? interpretation.summary : `AI統合は未取得です。取得済みテクニカルの方向は${{ bullish: "上昇寄り", bearish: "下落寄り", neutral: "中立", unknown: "未確認" }[scoreDirection(technical.score)]}ですが、総合判定は「待った」です。`,
     factors, bullishReasons: aiReady ? interpretation.bullishReasons : technicalBullish, bearishReasons: aiReady ? interpretation.bearishReasons : technicalBearish,
     riskWarnings: [...new Set([...technical.warnings, ...input.dataAvailability.missingData, ...input.eventRisk.reasons, ...(interpretation?.riskWarnings ?? []), ...(interpretation?.scenarioComment ? [interpretation.scenarioComment] : []), "確信度とスコアは勝率ではありません。条件が整うまでは待機できます。" ])],
     scenario, dataQuality: input.dataAvailability, currentRate: input.currentRate, analyzedAt: new Date(now).toISOString(), expiresAt: new Date(expiresAt).toISOString(), decisionReasons,
-    ai: { status: aiReady ? "available" : error === "not_configured" || error === "insufficient_data" ? "unavailable" : "error", model: aiReady ? model : null, code: error, message: error ? aiMessage(error, provider) : null },
+    ai: {
+      status: aiReady ? "available" : error === "not_configured" || error === "insufficient_data" ? "unavailable" : "error",
+      model: displayModel,
+      code: error,
+      message: error ? aiMessage(error, messageProvider, meta.detail) : null,
+      provider: messageProvider,
+      requestedModel: meta.requestedModel ?? (model || null),
+      actualModel: meta.actualModel ?? null,
+      fallbackUsed: !!meta.fallbackUsed,
+      latencyMs: meta.latencyMs ?? null,
+    },
     chartEvidence: input.chartImageAnalysis ? {
       used: true,
       timeframe: input.chartImageAnalysis.detected.timeframe,

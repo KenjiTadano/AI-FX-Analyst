@@ -4,14 +4,16 @@ import type { ChartImageAnalysis } from "../chart-analysis/types";
 import { canAttachToPairAnalysis } from "../chart-analysis/normalize";
 import { buildInput } from "./input";
 import { finalizeAnalysis } from "./engine";
-import { AnalysisError, validateInterpretation } from "./openai";
+import { AnalysisError } from "./openai";
+import { emptyAiMeta, isInterpretCallResult, type AiCallMeta, type InterpretCallResult } from "./interpret-types";
 import type { AiProviderName } from "./provider";
 import type { AIAnalysis, AnalysisInput, AnalysisResponse, ModelInterpretation } from "./types";
 
 export interface AnalysisDependencies {
   market(pair: Symbol): Promise<MarketData>;
   fundamental(pair: Symbol): Promise<FundamentalData>;
-  interpret(input: AnalysisInput): Promise<ModelInterpretation>;
+  /** Prefer InterpretCallResult. Plain ModelInterpretation remains supported for unit fixtures. */
+  interpret(input: AnalysisInput): Promise<ModelInterpretation | InterpretCallResult>;
   model: string;
   enabled: boolean;
   provider?: AiProviderName;
@@ -25,6 +27,14 @@ export interface AnalysisDependencies {
 function analysisCacheKey(pair: Symbol, chart?: ChartImageAnalysis | null): string {
   if (!chart || !canAttachToPairAnalysis(chart, pair)) return pair;
   return `${pair}:chart:${chart.analyzedAt}:${chart.dataQuality.score}:${chart.trend.direction}`;
+}
+
+function unwrapInterpret(value: ModelInterpretation | InterpretCallResult, provider: AiProviderName, model: string): {
+  interpretation: ModelInterpretation;
+  meta: AiCallMeta;
+} {
+  if (isInterpretCallResult(value)) return { interpretation: value.interpretation, meta: value.meta };
+  return { interpretation: value, meta: emptyAiMeta(provider, model) };
 }
 
 export function createAnalysisService(deps: AnalysisDependencies) {
@@ -45,6 +55,8 @@ export function createAnalysisService(deps: AnalysisDependencies) {
       const input = buildInput(pair, results[0].status === "fulfilled" ? results[0].value : null, results[1].status === "fulfilled" ? results[1].value : null, now(), chart);
       let interpretation: ModelInterpretation | null = null;
       let error: AnalysisError["code"] | null = null;
+      let detail: string | null = null;
+      let meta = emptyAiMeta(deps.provider ?? "openai", deps.model);
       try {
         if (!deps.enabled) throw new AnalysisError("not_configured");
         if (!input.technicalAnalysis.ready) throw new AnalysisError("insufficient_data");
@@ -52,9 +64,22 @@ export function createAnalysisService(deps: AnalysisDependencies) {
         calls = calls.filter(at => time - at < 86_400_000);
         if (calls.length >= (deps.dailyLimit ?? 100) || calls.filter(at => time - at < 3_600_000).length >= (deps.hourlyLimit ?? 20)) throw new AnalysisError("rate_limited");
         calls.push(time);
-        interpretation = validateInterpretation(await deps.interpret(input), input);
-      } catch (caught) { error = caught instanceof AnalysisError ? caught.code : "api_error"; }
-      const data = finalizeAnalysis(input, interpretation, deps.model, error, now(), deps.provider ?? "openai");
+        const result = unwrapInterpret(await deps.interpret(input), deps.provider ?? "openai", deps.model);
+        interpretation = result.interpretation;
+        meta = result.meta;
+      } catch (caught) {
+        if (caught instanceof AnalysisError) {
+          error = caught.code;
+          detail = caught.detail ?? null;
+        } else {
+          error = "api_error";
+        }
+      }
+      const data = finalizeAnalysis(input, interpretation, deps.model, error, now(), deps.provider ?? "openai", {
+        ...meta,
+        detail,
+        provider: meta.provider ?? deps.provider ?? "openai",
+      });
       cache.set(key, { data, revision });
       return { success: true, data, error: null, cached: false };
     })();
