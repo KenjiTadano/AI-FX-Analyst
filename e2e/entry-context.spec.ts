@@ -362,4 +362,35 @@ test.describe("entry context", () => {
     await expect(record.getByTestId("market-context-captured")).toHaveText(original ?? "");
     await expect(record.getByTestId("market-context-history-empty")).toHaveCount(0);
   });
+
+  test("38 market change analysis after refresh", async ({ page }) => {
+    await openDashboard(page, liveOpts);
+    const form = await openTradeForm(page);
+    await fillAndSave(page, form, "T106-change");
+    const record = await openSavedTrade(page, "T106-change");
+    await expect(record.getByTestId("market-context-change-no-revisions")).toBeVisible();
+    await record.getByTestId("market-context-refresh").click();
+    await record.getByTestId("market-context-refresh-ok").click();
+    await expect(page.getByText(/現在のMarket Contextを履歴へ追加しました/)).toBeVisible();
+    await expect(record.getByTestId("market-context-change")).toBeVisible();
+    await expect(record.getByTestId("market-context-change-body")).toBeVisible();
+    await expect(record.getByTestId("market-context-change-mode-latest")).toBeVisible();
+    await expect(record.getByTestId("market-context-change-elapsed")).toBeVisible();
+    const change = record.getByTestId("market-context-change");
+    await expect(change.getByText("改善", { exact: true })).toHaveCount(0);
+    await expect(change.getByText("悪化", { exact: true })).toHaveCount(0);
+    await expect(change.getByText("おすすめ", { exact: true })).toHaveCount(0);
+  });
+
+  test("39 market change 390 no overflow", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await openDashboard(page, liveOpts);
+    const form = await openTradeForm(page);
+    await fillAndSave(page, form, "T106-mobile");
+    const record = await openSavedTrade(page, "T106-mobile");
+    await record.getByTestId("market-context-refresh").click();
+    await record.getByTestId("market-context-refresh-ok").click();
+    await expect(record.getByTestId("market-context-change-body")).toBeVisible();
+    await assertNoOverflow(page);
+  });
 });

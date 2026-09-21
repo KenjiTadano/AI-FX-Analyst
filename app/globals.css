@@ -481,6 +481,20 @@ h2 { font-size: 17px; font-weight: 600; margin-top: 4px; }
 .market-context-revision summary { cursor: pointer; color: var(--green); padding: 4px 0; overflow-wrap: anywhere; }
 .market-context-refresh { margin: 10px 0; min-width: 0; }
 .market-context-refresh-confirm { margin-top: 8px; }
+.market-context-change { margin: 14px 0; min-width: 0; }
+.market-context-change h4, .market-context-change h6 { margin: 0 0 6px; overflow-wrap: anywhere; }
+.market-context-change h6 { font-size: 12px; margin-top: 12px; color: var(--muted); }
+.market-context-change-modes { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 8px 0; }
+.market-context-change-modes button[aria-pressed="true"] { border-color: var(--green); color: var(--green); }
+.market-context-change-select { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 12px; min-width: 0; }
+.market-context-change-select select { max-width: 100%; }
+.market-context-change-grid { display: grid; gap: 6px; margin: 8px 0; font-size: 13px; }
+.market-context-change-grid > div { display: grid; grid-template-columns: 7.5rem 1fr; gap: 8px; min-width: 0; }
+.market-context-change-grid dt { color: var(--muted); }
+.market-context-change-grid dd { margin: 0; overflow-wrap: anywhere; }
+.mcc-changed dd { color: var(--text, #e8eef7); }
+.mcc-unchanged dd { color: var(--muted); }
+.mcc-unavailable dd { color: var(--muted); font-style: italic; }
 .pretrade-perf-panel, .mtf-perf-panel, .pretrade-perf-section, .mtf-perf-section, .pretrade-perf-coverage, .mtf-perf-coverage { min-width: 0; }
 .pretrade-perf-section, .mtf-perf-section { margin-top: 16px; }
 .pretrade-perf-section h3, .mtf-perf-section h3 { font-size: 14px; margin: 0 0 8px; overflow-wrap: anywhere; }

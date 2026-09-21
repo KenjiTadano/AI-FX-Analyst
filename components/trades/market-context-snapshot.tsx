@@ -23,6 +23,7 @@ import {
 } from "@/lib/trades/market-context-snapshot";
 import type { Trade } from "@/lib/trades/types";
 import { dateTime } from "./format";
+import { MarketContextChangeDetail } from "./market-context-change";
 
 function stateLabel(state: "saved" | "unavailable" | "legacy"): string {
   if (state === "saved") return "saved";
@@ -158,6 +159,8 @@ export function MarketContextSnapshotDetail({
           {localError && <p className="negative" role="alert" data-testid="market-context-refresh-error">{localError}</p>}
         </div>
       )}
+
+      <MarketContextChangeDetail trade={trade} />
 
       <p className="footnote">{MARKET_CONTEXT_DISCLAIMER}</p>
       {/* Keep static strings referenced for tests that assert user-facing copy exists */}
