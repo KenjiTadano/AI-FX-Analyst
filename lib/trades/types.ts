@@ -4,6 +4,7 @@ import type { EntryTriggerEvaluationStatus, StructuredEntryTrigger } from "../ai
 import type { MultiTimeframeAnalysis } from "../market/multi-timeframe";
 import type { MarketRegimeAnalysis } from "../market/market-regime";
 import type { TradeExitPlan } from "./exit-plan";
+import type { MarketContextSnapshot } from "./market-context-snapshot";
 
 export const pairs = ["USD/JPY", "EUR/JPY", "GBP/JPY"] as const;
 export type TradePair = (typeof pairs)[number];
@@ -150,6 +151,8 @@ export interface Trade extends TradeDraft {
   analysisSnapshot: TradeAnalysisSnapshot | TradeAiAnalysisSnapshot | null;
   /** Task031 registration-time Exit Plan. Immutable after create. Optional for legacy. */
   exitPlan?: TradeExitPlan | null;
+  /** Task104 registration-time market context. AI-independent. Immutable after create. Optional for legacy. */
+  marketContextSnapshot?: MarketContextSnapshot | null;
   createdAt: string;
   updatedAt: string;
 }

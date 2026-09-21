@@ -4,6 +4,7 @@ import {
   type MarketRegimeAnalysis,
 } from "../market/market-regime";
 import type { MarketData, Symbol } from "../market/types";
+import { marketContextFromTrade } from "./market-context-snapshot";
 import { pairs, type Trade, type TradePair } from "./types";
 
 export const REGIME_SNAPSHOT_TITLE = "エントリー時の相場環境";
@@ -34,7 +35,13 @@ export function captureMarketRegimeSnapshot(
   return sanitized ? copy(sanitized) : null;
 }
 
+/**
+ * Read adapter: marketContextSnapshot (Task104) → legacy analysisSnapshot Regime.
+ * Never recomputes from live market.
+ */
 export function storedMarketRegimeAnalysis(trade: Trade): MarketRegimeAnalysis | null {
+  const independent = marketContextFromTrade(trade);
+  if (independent?.marketRegime) return independent.marketRegime;
   const snap = trade.analysisSnapshot;
   if (!snap || !("version" in snap) || snap.version !== 1) return null;
   return sanitizeMarketRegimeAnalysis(snap.marketRegimeAnalysis, trade.pair as Symbol);
@@ -42,6 +49,8 @@ export function storedMarketRegimeAnalysis(trade: Trade): MarketRegimeAnalysis |
 
 export function regimeSnapshotState(trade: Trade): RegimeSnapshotState {
   if (storedMarketRegimeAnalysis(trade)) return "ok";
+  const independent = marketContextFromTrade(trade);
+  if (independent) return independent.marketRegime != null ? "unreadable" : "absent";
   const snap = trade.analysisSnapshot;
   if (!snap || !("version" in snap) || snap.version !== 1) return "absent";
   return snap.marketRegimeAnalysis != null ? "unreadable" : "absent";

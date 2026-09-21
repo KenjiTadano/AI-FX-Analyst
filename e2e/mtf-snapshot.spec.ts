@@ -56,15 +56,18 @@ test.describe("mtf snapshot", () => {
     await expect(record.getByTestId("mtf-snapshot-conflicts")).toBeVisible();
   });
 
-  test("4 toggle OFF stores no MTF", async ({ page }) => {
+  test("4 toggle OFF still stores MTF via market context", async ({ page }) => {
     await openDashboard(page, { analysis: "trigger-price-below", calendar: "empty", marketPrice: 156.18, mtf: "all-bullish", includeTrades: false });
     const form = await openTradeForm(page);
     await form.getByLabel("現在のAI分析をこの取引に保存").uncheck();
     await expect(form.getByTestId("mtf-snapshot-preview")).toHaveCount(0);
     await fillAndSave(page, form, "T027-off");
     const record = page.locator(".trade-record").filter({ hasText: "T027-off" });
-    await expect(record.getByTestId("mtf-snapshot")).toHaveCount(0);
-    await expect(record.getByTestId("mtf-snapshot-missing")).toBeVisible();
+    // Task104: AI snapshot optional; market context still captures deterministic MTF.
+    await expect(record.getByTestId("market-context-snapshot")).toBeVisible();
+    await expect(record.getByTestId("market-context-mtf")).toHaveText("saved");
+    await expect(record.getByTestId("mtf-snapshot")).toBeVisible();
+    await expect(record.getByTestId("mtf-snapshot-alignment")).toHaveText("すべての時間軸が上向きです");
   });
 
   test("5 pair mismatch does not copy USD MTF onto EUR trade", async ({ page }) => {

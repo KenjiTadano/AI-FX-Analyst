@@ -29,6 +29,7 @@ import {
 } from "./mtf-performance";
 import { storedMarketRegimeAnalysis } from "./regime-snapshot";
 import { storedMultiTimeframeAnalysis } from "./mtf-snapshot";
+import { marketContextFromTrade } from "./market-context-snapshot";
 import { isRichSnapshot } from "./snapshot";
 import type { Trade } from "./types";
 import type { MarketRegimeKind, VolatilityRegime } from "../market/market-regime";
@@ -349,6 +350,17 @@ export type SavedTechnicalPoint = {
 };
 
 export function savedTechnicalPoint(trade: Trade): SavedTechnicalPoint | null {
+  const independent = marketContextFromTrade(trade)?.technicalContext;
+  if (independent && finiteNumber(independent.lastClose)) {
+    return {
+      close: independent.lastClose,
+      sma20: finiteNumber(independent.sma20) ? independent.sma20 : null,
+      sma75: finiteNumber(independent.sma75) ? independent.sma75 : null,
+      sma200: finiteNumber(independent.sma200) ? independent.sma200 : null,
+      rsi14: finiteNumber(independent.rsi14) ? independent.rsi14 : null,
+      source: independent.source,
+    };
+  }
   const mtf = storedMultiTimeframeAnalysis(trade);
   const frame1h = mtf?.timeframes.find(frame => frame.timeframe === "1h");
   if (frame1h && frame1h.sufficientData && finiteNumber(frame1h.lastClose)) {

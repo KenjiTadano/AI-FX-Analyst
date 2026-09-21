@@ -13,14 +13,53 @@ function iso(value: unknown): string { if (typeof value !== "string" || !Number.
 const nullable = (n: unknown) => n === null ? null : numeric(n);
 export function fromTradeRow(row: Record<string, unknown>, userId: string): Trade {
   if (row.user_id !== userId || !UUID.test(String(row.id))) throw new Error("取引の所有者を確認できません。");
-  const result = validateTrade({ id: row.id, pair: row.pair, side: row.side, status: row.status, quantity: numeric(row.quantity), entryPrice: numeric(row.entry_price), exitPrice: nullable(row.exit_price), openedAt: iso(row.opened_at), closedAt: row.closed_at === null ? null : iso(row.closed_at), stopLoss: nullable(row.stop_loss), takeProfit: nullable(row.take_profit), realizedPnl: nullable(row.realized_pnl), notes: row.notes ?? "", analysisSnapshot: row.analysis_snapshot, exitPlan: row.exit_plan, createdAt: iso(row.created_at), updatedAt: iso(row.updated_at) });
+  const result = validateTrade({
+    id: row.id,
+    pair: row.pair,
+    side: row.side,
+    status: row.status,
+    quantity: numeric(row.quantity),
+    entryPrice: numeric(row.entry_price),
+    exitPrice: nullable(row.exit_price),
+    openedAt: iso(row.opened_at),
+    closedAt: row.closed_at === null ? null : iso(row.closed_at),
+    stopLoss: nullable(row.stop_loss),
+    takeProfit: nullable(row.take_profit),
+    realizedPnl: nullable(row.realized_pnl),
+    notes: row.notes ?? "",
+    analysisSnapshot: row.analysis_snapshot,
+    exitPlan: row.exit_plan,
+    marketContextSnapshot: row.market_context_snapshot,
+    createdAt: iso(row.created_at),
+    updatedAt: iso(row.updated_at),
+  });
   if (!result.data) throw new Error(result.error);
   return result.data;
 }
 export function toTradeRow(trade: Trade, userId: string): Partial<TradeRow> {
   const checked = validateTrade(trade);
   if (!checked.data || !UUID.test(userId)) throw new Error(checked.error ?? "ユーザーが不正です。");
-  return { id: trade.id, user_id: userId, pair: trade.pair, side: trade.side, status: trade.status, quantity: trade.quantity, entry_price: trade.entryPrice, exit_price: trade.exitPrice, opened_at: trade.openedAt, closed_at: trade.closedAt, stop_loss: trade.stopLoss, take_profit: trade.takeProfit, realized_pnl: trade.realizedPnl, notes: trade.notes, analysis_snapshot: trade.analysisSnapshot as unknown as Json, exit_plan: (trade.exitPlan ?? null) as unknown as Json, created_at: trade.createdAt, updated_at: trade.updatedAt };
+  return {
+    id: trade.id,
+    user_id: userId,
+    pair: trade.pair,
+    side: trade.side,
+    status: trade.status,
+    quantity: trade.quantity,
+    entry_price: trade.entryPrice,
+    exit_price: trade.exitPrice,
+    opened_at: trade.openedAt,
+    closed_at: trade.closedAt,
+    stop_loss: trade.stopLoss,
+    take_profit: trade.takeProfit,
+    realized_pnl: trade.realizedPnl,
+    notes: trade.notes,
+    analysis_snapshot: trade.analysisSnapshot as unknown as Json,
+    exit_plan: (trade.exitPlan ?? null) as unknown as Json,
+    market_context_snapshot: (trade.marketContextSnapshot ?? null) as unknown as Json,
+    created_at: trade.createdAt,
+    updated_at: trade.updatedAt,
+  };
 }
 export function validateSettings(settings: RiskSettings): RiskSettings {
   const { balance, target, riskPercent, tradeUnit } = settings;

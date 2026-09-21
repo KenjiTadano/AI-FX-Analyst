@@ -4,6 +4,7 @@ import {
   type MultiTimeframeAnalysis,
 } from "../market/multi-timeframe";
 import type { MarketData, Symbol } from "../market/types";
+import { marketContextFromTrade } from "./market-context-snapshot";
 import { pairs, type Trade, type TradePair } from "./types";
 
 export const MTF_SNAPSHOT_TITLE = "エントリー時の市場構造";
@@ -29,7 +30,13 @@ export function captureMultiTimeframeSnapshot(
   );
 }
 
+/**
+ * Read adapter: marketContextSnapshot (Task104) → legacy analysisSnapshot MTF.
+ * Never recomputes from live market.
+ */
 export function storedMultiTimeframeAnalysis(trade: Trade): MultiTimeframeAnalysis | null {
+  const independent = marketContextFromTrade(trade);
+  if (independent?.multiTimeframe) return independent.multiTimeframe;
   const snap = trade.analysisSnapshot;
   if (!snap || !("version" in snap) || snap.version !== 1) return null;
   return sanitizeMultiTimeframeAnalysis(snap.multiTimeframeAnalysis, trade.pair);
@@ -37,6 +44,8 @@ export function storedMultiTimeframeAnalysis(trade: Trade): MultiTimeframeAnalys
 
 export function mtfSnapshotState(trade: Trade): MtfSnapshotState {
   if (storedMultiTimeframeAnalysis(trade)) return "ok";
+  const independent = marketContextFromTrade(trade);
+  if (independent) return independent.multiTimeframe != null ? "unreadable" : "absent";
   const snap = trade.analysisSnapshot;
   if (!snap || !("version" in snap) || snap.version !== 1) return "absent";
   return snap.multiTimeframeAnalysis != null ? "unreadable" : "absent";

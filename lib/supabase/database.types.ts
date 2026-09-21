@@ -6,6 +6,7 @@ export type TradeRow = {
   stop_loss: number | null; take_profit: number | null; realized_pnl: number | null; notes: string | null;
   analysis_snapshot: Json | null; // Task007/013 versioned JSON; optional Task022 preTradeContext / Task027 MTF; immutable after insert
   exit_plan: Json | null; // Task031 registration Exit Plan; immutable after insert; NULL for legacy
+  market_context_snapshot: Json | null; // Task104 AI-independent market context; immutable after insert; NULL for legacy
   local_trade_id: string | null; created_at: string; updated_at: string; version: number;
 }
 export type SettingsRow = { user_id: string; current_capital: number; target_capital: number; risk_percent: number; trade_unit: number; created_at: string; updated_at: string; version: number }

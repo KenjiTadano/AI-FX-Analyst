@@ -558,6 +558,15 @@ test("AW partial context", () => {
   const trade = createTrade(draft(), ai, "aw", capturedAt, { dailyPlan: plan, readiness, market: mtfMarket }).data!;
   if (!isRichSnapshot(trade.analysisSnapshot)) throw new Error("snap");
   trade.analysisSnapshot.marketRegimeAnalysis = undefined;
+  if (trade.marketContextSnapshot) {
+    trade.marketContextSnapshot = {
+      ...trade.marketContextSnapshot,
+      marketRegime: null,
+      technicalContext: trade.marketContextSnapshot.technicalContext?.source === "mtf_1h"
+        ? trade.marketContextSnapshot.technicalContext
+        : null,
+    };
+  }
   const stored = buildStoredEntryContext(trade)!;
   assert.ok(stored.mtf);
   assert.ok(stored.readiness);

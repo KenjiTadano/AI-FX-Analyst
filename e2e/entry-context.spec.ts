@@ -187,16 +187,19 @@ test.describe("entry context", () => {
     await expect(record.getByTestId("pretrade-action")).toHaveText("WAIT");
   });
 
-  test("22 registration OFF no snapshot", async ({ page }) => {
+  test("22 registration OFF keeps market context, drops AI", async ({ page }) => {
     await openDashboard(page, liveOpts);
     const form = await openTradeForm(page);
     await form.getByLabel("現在のAI分析をこの取引に保存").uncheck();
     await expect(form.getByTestId("regime-snapshot-preview")).toHaveCount(0);
     await fillAndSave(page, form, "T030-off");
     const record = page.locator(".trade-record").filter({ hasText: "T030-off" });
-    await expect(record.getByTestId("regime-snapshot")).toHaveCount(0);
-    await expect(record.getByTestId("regime-snapshot-missing")).toBeVisible();
+    // Task104: AI/preTrade optional; independent market context still saves Regime/MTF.
     await expect(record.getByTestId("pretrade-missing")).toBeVisible();
+    await expect(record.getByTestId("market-context-snapshot")).toBeVisible();
+    await expect(record.getByTestId("market-context-regime")).toHaveText("saved");
+    await expect(record.getByTestId("regime-snapshot")).toBeVisible();
+    await expect(record.getByTestId("regime-snapshot-kind")).toHaveText("トレンド");
   });
 
   test("23 historical Regime fixed", async ({ page }) => {
@@ -238,6 +241,8 @@ test.describe("entry context", () => {
     await expect(closed.getByTestId("pretrade-action")).toHaveText("WAIT");
     await expect(closed.getByTestId("entry-context")).toBeVisible();
     await expect(closed.getByRole("heading", { name: "エントリー判断コンテキスト" })).toBeVisible();
+    await expect(closed.getByTestId("market-context-mtf")).toHaveText("saved");
+    await expect(closed.getByTestId("market-context-regime")).toHaveText("saved");
   });
 
   test("26 legacy no Regime", async ({ page }) => {
@@ -248,6 +253,7 @@ test.describe("entry context", () => {
     await expect(item.getByTestId("pretrade-action")).toHaveText("WAIT");
     await expect(item.getByTestId("regime-snapshot-missing")).toHaveText("相場環境は保存されていません");
     await expect(item.getByTestId("regime-kind")).toHaveCount(0);
+    await expect(item.getByTestId("market-context-legacy")).toBeVisible();
   });
 
   test("27 malformed Regime isolated", async ({ page }) => {
@@ -302,6 +308,30 @@ test.describe("entry context", () => {
     await openDashboard(page, liveOpts);
     const form = await openTradeForm(page);
     await expect(form.getByTestId("pretrade-review")).toBeVisible();
+    await assertNoOverflow(page);
+  });
+
+  test("34 market context snapshot captured on save", async ({ page }) => {
+    await openDashboard(page, liveOpts);
+    const form = await openTradeForm(page);
+    await fillAndSave(page, form, "T104-capture");
+    const record = await openSavedTrade(page, "T104-capture");
+    await expect(record.getByTestId("market-context-snapshot")).toBeVisible();
+    await expect(record.getByTestId("market-context-pair")).toHaveText("USD/JPY");
+    await expect(record.getByTestId("market-context-captured")).not.toHaveText("");
+    await expect(record.getByTestId("market-context-mtf")).toHaveText("saved");
+    await expect(record.getByTestId("market-context-regime")).toHaveText("saved");
+    await expect(record.getByTestId("market-context-technical")).toHaveText("saved");
+    await expect(record.getByText("gpt-", { exact: false })).toHaveCount(0);
+  });
+
+  test("35 market context 390 no overflow", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await openDashboard(page, liveOpts);
+    const form = await openTradeForm(page);
+    await fillAndSave(page, form, "T104-mobile");
+    const record = await openSavedTrade(page, "T104-mobile");
+    await expect(record.getByTestId("market-context-snapshot")).toBeVisible();
     await assertNoOverflow(page);
   });
 });

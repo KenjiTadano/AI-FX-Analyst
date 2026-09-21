@@ -1,6 +1,7 @@
 import { pairs, type Trade, type TradeDraft, type TradeAnalysisSnapshot, type Result } from "./types";
 import { pnl, validPrice, validQuantity } from "./calculations";
 import { sanitizeExitPlan } from "./exit-plan";
+import { sanitizeMarketContextSnapshot } from "./market-context-snapshot";
 import { sanitizePersistedSnapshot } from "./snapshot";
 const object = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
 export function validDate(v: unknown): v is string {
@@ -30,5 +31,25 @@ export function validateTrade(v: unknown): Result<Trade> {
   const realizedPnl = draft.data.status === "closed" ? pnl(draft.data.side, draft.data.entryPrice, draft.data.exitPrice!, draft.data.quantity) : null;
   if (v.realizedPnl !== realizedPnl) return { data: null, error: "保存された損益と取引価格が一致しません。" };
   const exitPlan = v.exitPlan == null ? null : sanitizeExitPlan(v.exitPlan);
-  return { data: { ...draft.data, id: v.id, createdAt: v.createdAt, updatedAt: v.updatedAt, analysisSnapshot: snapshot, exitPlan, realizedPnl }, error: null };
+  const marketContextRaw = v.marketContextSnapshot;
+  // Snapshot pair is registration provenance and may differ from trade.pair after an edit (same as analysisSnapshot).
+  const marketContextSnapshot = marketContextRaw == null || marketContextRaw === undefined
+    ? null
+    : sanitizeMarketContextSnapshot(marketContextRaw);
+  if (marketContextRaw != null && marketContextSnapshot === null) {
+    return { data: null, error: "記録の市場コンテキストスナップショットが不正です。" };
+  }
+  return {
+    data: {
+      ...draft.data,
+      id: v.id,
+      createdAt: v.createdAt,
+      updatedAt: v.updatedAt,
+      analysisSnapshot: snapshot,
+      exitPlan,
+      marketContextSnapshot,
+      realizedPnl,
+    },
+    error: null,
+  };
 }

@@ -190,6 +190,7 @@ test("N: stored helper sanitizes pair mismatch", () => {
   const market = marketFrom("USD/JPY", { day: 1, h4: 1, h1: 1, m15: 1 });
   const trade = createTrade(draft(), ai(), "n", capturedAt, { market }).data!;
   if (!isRichSnapshot(trade.analysisSnapshot) || !trade.analysisSnapshot.multiTimeframeAnalysis) throw new Error("mtf");
+  trade.marketContextSnapshot = null;
   trade.analysisSnapshot.multiTimeframeAnalysis = { ...trade.analysisSnapshot.multiTimeframeAnalysis, pair: "EUR/JPY" };
   assert.equal(storedMultiTimeframeAnalysis(trade), null);
   assert.equal(mtfSnapshotState(trade), "unreadable");
