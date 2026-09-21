@@ -111,4 +111,21 @@ test.describe("performance intelligence", () => {
     await openPerformance(page);
     await assertNoOverflow(page);
   });
+
+  test("10 v2 timeframe and technical sections visible", async ({ page }) => {
+    await openDashboard(page, { tradeSet: "performance-intelligence" });
+    await openPerformance(page);
+    await expect(page.getByTestId("pi-r-multiple")).toBeVisible();
+    await expect(page.getByTestId("pi-positive-r")).toBeVisible();
+    await expect(page.getByTestId("pi-negative-r")).toBeVisible();
+    await expect(page.getByTestId("pi-timeframe")).toBeVisible();
+    await expect(page.getByTestId("pi-tf-15m")).toBeVisible();
+    await expect(page.getByTestId("pi-tf-1h")).toBeVisible();
+    await expect(page.getByTestId("pi-tf-4h")).toBeVisible();
+    await expect(page.getByTestId("pi-tf-1day")).toBeVisible();
+    await expect(page.getByTestId("pi-technical")).toBeVisible();
+    await expect(page.getByTestId("pi-sma")).toBeVisible();
+    await expect(page.getByTestId("pi-rsi")).toBeVisible();
+    await expect(page.getByTestId("pi-cross")).toBeVisible();
+  });
 });

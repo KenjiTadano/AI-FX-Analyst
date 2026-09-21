@@ -467,6 +467,9 @@ h2 { font-size: 17px; font-weight: 600; margin-top: 4px; }
 .pi-section > h3 { font-size: 14px; margin: 0 0 8px; overflow-wrap: anywhere; }
 .pi-observations-list { margin: 8px 0 0; padding-left: 1.2em; font-size: 13px; line-height: 1.7; color: var(--muted); overflow-wrap: anywhere; }
 .pi-cards small { display: block; margin-top: 6px; }
+.pi-timeframe-stack { display: grid; gap: 12px; min-width: 0; }
+.pi-timeframe-block { min-width: 0; }
+.pi-timeframe-block > h4 { margin: 0 0 4px; font-size: 13px; }
 .pretrade-perf-panel, .mtf-perf-panel, .pretrade-perf-section, .mtf-perf-section, .pretrade-perf-coverage, .mtf-perf-coverage { min-width: 0; }
 .pretrade-perf-section, .mtf-perf-section { margin-top: 16px; }
 .pretrade-perf-section h3, .mtf-perf-section h3 { font-size: 14px; margin: 0 0 8px; overflow-wrap: anywhere; }

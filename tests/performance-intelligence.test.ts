@@ -19,10 +19,14 @@ import {
   buildPerformanceIntelligence,
   calculateContextSummary,
   classifyRDistributionBucket,
+  classifyRsiBucket,
   classifySavedAiDirection,
   classifySavedRegimeGroup,
   classifySavedVolatility,
+  classifySmaContexts,
   realizedROrNull,
+  savedTechnicalPoint,
+  savedTimeframeTrend,
 } from "../lib/trades/performance-intelligence";
 import type { Trade, TradeAiAnalysisSnapshot, TradeAnalysisSnapshot, PreTradeContextSnapshot } from "../lib/trades/types";
 import type { StructuredEntryTrigger } from "../lib/ai/entry-trigger";
@@ -35,7 +39,7 @@ const SOURCE = [
 ].join("\n");
 
 const FORBIDDEN =
-  /この条件で取引すると有利|トレンド相場を狙うべき|レンジを避けるべき|勝ちパターン|今後も期待できる|優位性がある|\bbest\b|\bworst\b|good context|bad context|high quality|\bscore\b|有意に高い|統計的に優位|統計的有意|Date\.now\(/;
+  /この条件で取引すると有利|トレンド相場を狙うべき|レンジを避けるべき|勝ちパターン|今後も期待できる|優位性がある|\bbest\b|\bworst\b|good context|bad context|high quality|\bscore\b|有意に高い|統計的に優位|統計的有意|Date\.now\(|買うべき|最も勝てる|今後この戦略/;
 
 function quality() {
   return {
@@ -52,7 +56,11 @@ function quality() {
   };
 }
 
-function frame(tf: TimeframeAnalysis["timeframe"], trend: TimeframeTrend): TimeframeAnalysis {
+function frame(
+  tf: TimeframeAnalysis["timeframe"],
+  trend: TimeframeTrend,
+  overrides: Partial<Omit<TimeframeAnalysis, "timeframe" | "trend" | "structure" | "sufficientData">> = {},
+): TimeframeAnalysis {
   const ok = trend !== "unavailable";
   return {
     timeframe: tf,
@@ -67,6 +75,7 @@ function frame(tf: TimeframeAnalysis["timeframe"], trend: TimeframeTrend): Timef
     recentLow: ok ? 156 : null,
     dataPoints: ok ? 240 : 0,
     sufficientData: ok,
+    ...overrides,
   };
 }
 
@@ -515,4 +524,187 @@ test("profit factor null when no losses", () => {
 
 test("0.00R goes to r_0_to_1", () => {
   assert.equal(classifyRDistributionBucket(0), "r_0_to_1");
+});
+
+test("v2 CLOSED only and period filter still apply", () => {
+  const open = trade({ id: "open", status: "open", exitPrice: null, realizedPnl: null, closedAt: null });
+  const closed = closedWithR("c1", 155.5, 100, {
+    analysisSnapshot: snap({ mtf: mtf({ alignment: "aligned_bullish", bias: "bullish" }), regime: regimeOf("trending") }),
+  });
+  const result = buildPerformanceIntelligence([open, closed]);
+  assert.equal(result.overview.closedTrades, 1);
+  assert.equal(result.timeframe.byTimeframe.some(block => block.eligibleWithFrame > 0), true);
+});
+
+test("v2 missing MTF snapshot excluded from timeframe analysis", () => {
+  const missing = closedWithR("m1", 155.5, 100, { analysisSnapshot: snap({ regime: regimeOf("trending") }) });
+  const withMtf = closedWithR("m2", 155.5, 100, {
+    analysisSnapshot: snap({ mtf: mtf({ alignment: "aligned_bullish", bias: "bullish" }), regime: regimeOf("trending") }),
+  });
+  assert.equal(savedTimeframeTrend(missing, "4h"), null);
+  assert.equal(savedTimeframeTrend(withMtf, "4h"), "bullish");
+  const result = buildPerformanceIntelligence([missing, withMtf]);
+  assert.equal(result.timeframe.missingMtf, 1);
+  const fourHour = result.timeframe.byTimeframe.find(block => block.timeframe === "4h");
+  assert.equal(fourHour?.eligibleWithFrame, 1);
+  assert.equal(fourHour?.missingFrame, 1);
+});
+
+test("v2 individual timeframe grouping and metrics", () => {
+  const custom = (trend15: TimeframeTrend, trend4h: TimeframeTrend): MultiTimeframeAnalysis => ({
+    pair: "USD/JPY",
+    analyzedAt: NOW,
+    timeframes: [
+      frame("1day", "bullish"),
+      frame("4h", trend4h),
+      frame("1h", "bullish"),
+      frame("15m", trend15),
+    ],
+    higherTimeframeBias: "bullish",
+    alignment: "mixed",
+    availableTimeframes: 4,
+    totalTimeframes: 4,
+    conflicts: [],
+  });
+  const rows = [
+    closedWithR("t1", 155.8, 100, { analysisSnapshot: snap({ mtf: custom("bullish", "bullish"), regime: regimeOf("trending") }) }),
+    closedWithR("t2", 155.8, 100, { analysisSnapshot: snap({ mtf: custom("bullish", "bearish"), regime: regimeOf("trending") }) }),
+    closedWithR("t3", 154.9, -80, { analysisSnapshot: snap({ mtf: custom("bearish", "bullish"), regime: regimeOf("range") }) }),
+  ];
+  const result = buildPerformanceIntelligence(rows);
+  const tf15 = result.timeframe.byTimeframe.find(block => block.timeframe === "15m")!;
+  assert.equal(tf15.byTrend.find(g => g.key === "15m:bullish")?.sampleSize, 2);
+  assert.equal(tf15.byTrend.find(g => g.key === "15m:bearish")?.sampleSize, 1);
+  const bull = tf15.byTrend.find(g => g.key === "15m:bullish")!;
+  assert.equal(bull.wins, 2);
+  assert.equal(bull.totalPnl, 200);
+  assert.ok(bull.averagePnl != null);
+  assert.ok(bull.rSampleSize >= 1);
+});
+
+test("v2 sample n < 5 marks insufficient", () => {
+  const rows = Array.from({ length: 3 }, (_, i) => closedWithR(`s${i}`, 155.8, 50, {
+    analysisSnapshot: snap({ mtf: mtf({ alignment: "aligned_bullish", bias: "bullish" }), regime: regimeOf("trending") }),
+  }));
+  const result = buildPerformanceIntelligence(rows);
+  const group = result.timeframe.byTimeframe.find(b => b.timeframe === "1h")?.byTrend.find(g => g.key === "1h:bullish");
+  assert.equal(group?.sampleSize, 3);
+  assert.equal(group?.sufficientSample, false);
+});
+
+test("v2 realizedR missing is not 0 and positive/negative R counts", () => {
+  const withR = closedWithR("r1", 155.8, 100, { analysisSnapshot: snap({ mtf: mtf({ alignment: "aligned_bullish", bias: "bullish" }) }) });
+  const lossR = closedWithR("r2", 154.9, -100, { analysisSnapshot: snap({ mtf: mtf({ alignment: "aligned_bullish", bias: "bullish" }) }) });
+  const noR = trade({
+    id: "r3",
+    realizedPnl: 50,
+    exitPlan: null,
+    analysisSnapshot: snap({ mtf: mtf({ alignment: "aligned_bullish", bias: "bullish" }) }),
+  });
+  assert.equal(realizedROrNull(noR), null);
+  const result = buildPerformanceIntelligence([withR, lossR, noR]);
+  assert.equal(result.rPerformance.coverage.present, 2);
+  assert.equal(result.rPerformance.coverage.missing, 1);
+  assert.equal(result.rPerformance.positiveRCount, 1);
+  assert.equal(result.rPerformance.negativeRCount, 1);
+  assert.equal(typeof result.rPerformance.totalR, "number");
+});
+
+test("v2 SMA context when data exists and missing when not", () => {
+  const above = closedWithR("sma1", 155.8, 100, {
+    analysisSnapshot: snap({
+      mtf: {
+        ...mtf({ alignment: "aligned_bullish", bias: "bullish" }),
+        timeframes: mtfTimeframes.map(tf => frame(tf, "bullish", { lastClose: 157, sma20: 156, sma75: 155, sma200: 154 })),
+      },
+    }),
+  });
+  const below = closedWithR("sma2", 154.9, -50, {
+    analysisSnapshot: snap({
+      mtf: {
+        ...mtf({ alignment: "mixed", bias: "bearish" }),
+        timeframes: mtfTimeframes.map(tf => frame(tf, "bearish", { lastClose: 154, sma20: 156, sma75: 157, sma200: 158 })),
+      },
+    }),
+  });
+  const noTech = closedWithR("sma3", 155.5, 10, { analysisSnapshot: snap() });
+  assert.ok(classifySmaContexts(savedTechnicalPoint(above)!).includes("price_gt_sma20"));
+  assert.ok(classifySmaContexts(savedTechnicalPoint(below)!).includes("price_lt_sma20"));
+  assert.equal(savedTechnicalPoint(noTech), null);
+  const result = buildPerformanceIntelligence([above, below, noTech]);
+  assert.ok(result.technical.sma.groups.some(g => g.key === "price_gt_sma20"));
+  assert.ok(result.technical.sma.groups.some(g => g.key === "price_lt_sma20"));
+  assert.equal(result.technical.sma.coverage.present, 2);
+  const empty = buildPerformanceIntelligence([noTech]);
+  assert.equal(empty.technical.sma.groups.length, 0);
+  assert.match(empty.technical.sma.noDataReason ?? "", /価格|SMA/);
+});
+
+test("v2 RSI buckets boundaries and missing", () => {
+  assert.equal(classifyRsiBucket(29.9), "rsi_lt_30");
+  assert.equal(classifyRsiBucket(30), "rsi_30_45");
+  assert.equal(classifyRsiBucket(44.9), "rsi_30_45");
+  assert.equal(classifyRsiBucket(45), "rsi_45_55");
+  assert.equal(classifyRsiBucket(55), "rsi_55_70");
+  assert.equal(classifyRsiBucket(70), "rsi_55_70");
+  assert.equal(classifyRsiBucket(70.1), "rsi_gt_70");
+  const mid = closedWithR("rsi1", 155.5, 80, {
+    analysisSnapshot: snap({
+      mtf: {
+        ...mtf({ alignment: "aligned_bullish", bias: "bullish" }),
+        timeframes: mtfTimeframes.map(tf => frame(tf, "bullish", { rsi14: 50 })),
+      },
+    }),
+  });
+  const hot = closedWithR("rsi2", 155.5, 40, {
+    analysisSnapshot: snap({
+      mtf: {
+        ...mtf({ alignment: "aligned_bullish", bias: "bullish" }),
+        timeframes: mtfTimeframes.map(tf => frame(tf, "bullish", { rsi14: 75 })),
+      },
+    }),
+  });
+  const noRsi = closedWithR("rsi3", 155.5, 10, {
+    analysisSnapshot: snap({
+      mtf: {
+        ...mtf({ alignment: "aligned_bullish", bias: "bullish" }),
+        timeframes: mtfTimeframes.map(tf => frame(tf, "bullish", { rsi14: null, lastClose: 156, sma20: null, sma75: null, sma200: null })),
+      },
+    }),
+  });
+  const result = buildPerformanceIntelligence([mid, hot, noRsi]);
+  assert.equal(result.technical.rsi.groups.find(g => g.key === "rsi_45_55")?.sampleSize, 1);
+  assert.equal(result.technical.rsi.groups.find(g => g.key === "rsi_gt_70")?.sampleSize, 1);
+  assert.equal(result.technical.rsi.coverage.present, 2);
+  const missingOnly = buildPerformanceIntelligence([
+    closedWithR("rsi4", 155.5, 10, { analysisSnapshot: snap() }),
+  ]);
+  assert.equal(missingOnly.technical.rsi.groups.length, 0);
+  assert.match(missingOnly.technical.rsi.noDataReason ?? "", /RSI|価格/);
+});
+
+test("v2 Regime MTF cross regression and no 3-axis", () => {
+  const rows = [
+    closedWithR("x1", 155.8, 100, {
+      analysisSnapshot: snap({
+        regime: regimeOf("trending"),
+        mtf: mtf({ alignment: "aligned_bullish", bias: "bullish" }),
+      }),
+    }),
+    closedWithR("x2", 154.9, -50, {
+      analysisSnapshot: snap({
+        regime: regimeOf("trending"),
+        mtf: mtf({ alignment: "mixed", bias: "bullish" }),
+      }),
+    }),
+  ];
+  const result = buildPerformanceIntelligence(rows);
+  assert.ok(result.cross.regimeMtf.some(g => g.key === "trending_aligned"));
+  assert.ok(result.cross.regimeMtf.some(g => g.key === "trending_mixed"));
+  assert.equal(Object.keys(result.cross).length, 1);
+  assert.doesNotMatch(SOURCE, /regimeMtfRsi|three.?axis|× MTF ×/);
+});
+
+test("v2 no live market recomputation helpers", () => {
+  assert.doesNotMatch(SOURCE, /multiTimeframeForPair\(|marketRegimeForPair\(|getMarketData\(|calculateIndicators\(/);
 });

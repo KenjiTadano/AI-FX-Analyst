@@ -32,6 +32,11 @@ import { storedMultiTimeframeAnalysis } from "./mtf-snapshot";
 import { isRichSnapshot } from "./snapshot";
 import type { Trade } from "./types";
 import type { MarketRegimeKind, VolatilityRegime } from "../market/market-regime";
+import {
+  finiteNumber,
+  type TimeframeTrend,
+} from "../market/multi-timeframe";
+import { type MarketTimeframe } from "../market/types";
 
 export { MIN_INSIGHT_SAMPLE_SIZE, formatContextProfitFactor };
 
@@ -41,6 +46,68 @@ export const PERFORMANCE_INTELLIGENCE_DISCLAIMER =
   "この集計は保存済み取引の過去結果です。将来の勝率や利益を予測するものではなく、因果関係や優位性を示すものでもありません。";
 export const PERFORMANCE_INTELLIGENCE_EMPTY = "この期間には決済済み取引がありません。";
 export const MAX_PERFORMANCE_OBSERVATIONS = 5;
+
+/** Display order for individual timeframe performance (saved MTF frames only). */
+export const INDIVIDUAL_TF_ORDER = ["15m", "1h", "4h", "1day"] as const satisfies readonly MarketTimeframe[];
+
+export const INDIVIDUAL_TF_LABELS: Record<(typeof INDIVIDUAL_TF_ORDER)[number], string> = {
+  "15m": "15m",
+  "1h": "1h",
+  "4h": "4h",
+  "1day": "1D",
+};
+
+export const TF_TREND_ORDER = ["bullish", "bearish", "neutral"] as const;
+
+export const TF_TREND_LABELS: Record<(typeof TF_TREND_ORDER)[number], string> = {
+  bullish: "bullish",
+  bearish: "bearish",
+  neutral: "neutral",
+};
+
+export const SMA_CONTEXT_ORDER = [
+  "price_gt_sma20",
+  "price_lt_sma20",
+  "price_gt_sma75",
+  "price_lt_sma75",
+  "price_gt_sma200",
+  "price_lt_sma200",
+] as const;
+
+export type SmaContextKey = (typeof SMA_CONTEXT_ORDER)[number];
+
+export const SMA_CONTEXT_LABELS: Record<SmaContextKey, string> = {
+  price_gt_sma20: "price > SMA20",
+  price_lt_sma20: "price < SMA20",
+  price_gt_sma75: "price > SMA75",
+  price_lt_sma75: "price < SMA75",
+  price_gt_sma200: "price > SMA200",
+  price_lt_sma200: "price < SMA200",
+};
+
+export const RSI_BUCKET_ORDER = [
+  "rsi_lt_30",
+  "rsi_30_45",
+  "rsi_45_55",
+  "rsi_55_70",
+  "rsi_gt_70",
+] as const;
+
+export type RsiBucketKey = (typeof RSI_BUCKET_ORDER)[number];
+
+export const RSI_BUCKET_LABELS: Record<RsiBucketKey, string> = {
+  rsi_lt_30: "RSI < 30",
+  rsi_30_45: "RSI 30–45",
+  rsi_45_55: "RSI 45–55",
+  rsi_55_70: "RSI 55–70",
+  rsi_gt_70: "RSI > 70",
+};
+
+export const TECHNICAL_NO_PRICE = "保存データなし（価格がsnapshotにありません）";
+export const TECHNICAL_NO_SMA = "保存データなし（SMA値がsnapshotにありません）";
+export const TECHNICAL_NO_RSI = "保存データなし（RSIがsnapshotにありません）";
+export const TIMEFRAME_NO_MTF = "保存データなし（MTF snapshotがありません）";
+export const TIMEFRAME_NO_FRAME = "この時間軸の保存データなし";
 
 export const R_DISTRIBUTION_ORDER = [
   "r_le_minus_1",
@@ -138,6 +205,8 @@ export type TradingPerformanceIntelligence = {
     coverage: CoverageMetric;
     totalR: number | null;
     averageR: number | null;
+    positiveRCount: number;
+    negativeRCount: number;
     distribution: Record<RDistributionBucket, number>;
   };
   aiDirection: {
@@ -165,7 +234,33 @@ export type TradingPerformanceIntelligence = {
   cross: {
     regimeMtf: ContextSummary[];
   };
+  timeframe: {
+    coverage: CoverageMetric;
+    missingMtf: number;
+    byTimeframe: IndividualTimeframePerformance[];
+  };
+  technical: {
+    sma: {
+      coverage: CoverageMetric;
+      groups: ContextSummary[];
+      noDataReason: string | null;
+    };
+    rsi: {
+      coverage: CoverageMetric;
+      groups: ContextSummary[];
+      noDataReason: string | null;
+    };
+  };
   observations: string[];
+};
+
+export type IndividualTimeframePerformance = {
+  timeframe: (typeof INDIVIDUAL_TF_ORDER)[number];
+  label: string;
+  eligibleWithFrame: number;
+  missingFrame: number;
+  byTrend: ContextSummary[];
+  noDataReason: string | null;
 };
 
 const FORBIDDEN =
@@ -240,6 +335,80 @@ export function classifySavedVolatility(trade: Trade): VolatilityRegime | null {
   return "unavailable";
 }
 
+/**
+ * Saved 1h technicals only (MTF 1h frame preferred, else Regime evidence).
+ * Never recomputes from live market data.
+ */
+export type SavedTechnicalPoint = {
+  close: number;
+  sma20: number | null;
+  sma75: number | null;
+  sma200: number | null;
+  rsi14: number | null;
+  source: "mtf_1h" | "regime_1h";
+};
+
+export function savedTechnicalPoint(trade: Trade): SavedTechnicalPoint | null {
+  const mtf = storedMultiTimeframeAnalysis(trade);
+  const frame1h = mtf?.timeframes.find(frame => frame.timeframe === "1h");
+  if (frame1h && frame1h.sufficientData && finiteNumber(frame1h.lastClose)) {
+    return {
+      close: frame1h.lastClose,
+      sma20: finiteNumber(frame1h.sma20) ? frame1h.sma20 : null,
+      sma75: finiteNumber(frame1h.sma75) ? frame1h.sma75 : null,
+      sma200: finiteNumber(frame1h.sma200) ? frame1h.sma200 : null,
+      rsi14: finiteNumber(frame1h.rsi14) ? frame1h.rsi14 : null,
+      source: "mtf_1h",
+    };
+  }
+  const regime = storedMarketRegimeAnalysis(trade);
+  if (regime && finiteNumber(regime.evidence.close)) {
+    const e = regime.evidence;
+    return {
+      close: e.close!,
+      sma20: finiteNumber(e.sma20) ? e.sma20 : null,
+      sma75: finiteNumber(e.sma75) ? e.sma75 : null,
+      sma200: finiteNumber(e.sma200) ? e.sma200 : null,
+      rsi14: finiteNumber(e.rsi14) ? e.rsi14 : null,
+      source: "regime_1h",
+    };
+  }
+  return null;
+}
+
+/** Saved MTF frame trend for one timeframe. Missing/unavailable → null (exclude from that TF analysis). */
+export function savedTimeframeTrend(trade: Trade, timeframe: MarketTimeframe): TimeframeTrend | null {
+  const mtf = storedMultiTimeframeAnalysis(trade);
+  if (!mtf) return null;
+  const frame = mtf.timeframes.find(item => item.timeframe === timeframe);
+  if (!frame || !frame.sufficientData || frame.trend === "unavailable") return null;
+  if (frame.trend === "bullish" || frame.trend === "bearish" || frame.trend === "neutral") return frame.trend;
+  return null;
+}
+
+/** Deterministic RSI buckets from saved value only. */
+export function classifyRsiBucket(rsi: number): RsiBucketKey {
+  if (rsi < 30) return "rsi_lt_30";
+  if (rsi < 45) return "rsi_30_45";
+  if (rsi < 55) return "rsi_45_55";
+  if (rsi <= 70) return "rsi_55_70";
+  return "rsi_gt_70";
+}
+
+/** SMA relation buckets from saved close + SMA. Equal → empty (not guessed). */
+export function classifySmaContexts(point: SavedTechnicalPoint): SmaContextKey[] {
+  const keys: SmaContextKey[] = [];
+  const push = (gt: SmaContextKey, lt: SmaContextKey, sma: number | null) => {
+    if (!finiteNumber(sma)) return;
+    if (point.close > sma) keys.push(gt);
+    else if (point.close < sma) keys.push(lt);
+  };
+  push("price_gt_sma20", "price_lt_sma20", point.sma20);
+  push("price_gt_sma75", "price_lt_sma75", point.sma75);
+  push("price_gt_sma200", "price_lt_sma200", point.sma200);
+  return keys;
+}
+
 export function calculateContextSummary(key: string, label: string, trades: Trade[]): ContextSummary {
   const stats = summarize(trades);
   const rValues = trades.map(realizedROrNull).filter((value): value is number => value != null);
@@ -285,9 +454,12 @@ function buildObservations(input: {
   mtf: ReturnType<typeof buildMtfPerformanceAnalysis>;
   aiDirection: ContextSummary[];
   preTrade: ReturnType<typeof buildPreTradeContextPerformance>;
+  timeframeSummaries: ContextSummary[];
+  smaGroups: ContextSummary[];
+  rsiGroups: ContextSummary[];
 }): string[] {
   const items: string[] = [];
-  const { closed, rSummary, regimeSummaries, regimeMtf, mtf, aiDirection, preTrade } = input;
+  const { closed, rSummary, regimeSummaries, regimeMtf, mtf, aiDirection, preTrade, timeframeSummaries, smaGroups, rsiGroups } = input;
 
   if (!closed.length) {
     return [assertSafe(PERFORMANCE_INTELLIGENCE_EMPTY)];
@@ -344,6 +516,13 @@ function buildObservations(input: {
     ));
   }
 
+  const fourHourBull = timeframeSummaries.find(group => group.key === "4h:bullish");
+  if (fourHourBull && fourHourBull.sufficientSample && fourHourBull.averageR != null && fourHourBull.rSampleSize >= MIN_INSIGHT_SAMPLE_SIZE) {
+    items.push(assertSafe(
+      `4H bullish contextではn=${fourHourBull.sampleSize}、平均Rは${fmtR(fourHourBull.averageR)}でした。`,
+    ));
+  }
+
   const wait = aiDirection.find(group => group.key === "WAIT");
   const buy = aiDirection.find(group => group.key === "BUY");
   if (wait && buy && wait.sufficientSample && buy.sufficientSample
@@ -359,6 +538,20 @@ function buildObservations(input: {
     && met.averagePnl != null && notMet.averagePnl != null) {
     items.push(assertSafe(
       `保存済みTriggerが成立だった取引の平均損益は${fmtMoney(met.averagePnl)}（n=${met.sampleSize}）、未成立は${fmtMoney(notMet.averagePnl)}（n=${notMet.sampleSize}）でした。`,
+    ));
+  }
+
+  const gtSma20 = smaGroups.find(group => group.key === "price_gt_sma20");
+  if (gtSma20 && gtSma20.sufficientSample && gtSma20.averagePnl != null) {
+    items.push(assertSafe(
+      `保存済み1hでprice > SMA20だった取引の平均損益は${fmtMoney(gtSma20.averagePnl)}（n=${gtSma20.sampleSize}）でした。`,
+    ));
+  }
+
+  const rsiMid = rsiGroups.find(group => group.key === "rsi_45_55");
+  if (rsiMid && rsiMid.sufficientSample && rsiMid.averagePnl != null) {
+    items.push(assertSafe(
+      `保存済み1h RSIが45–55だった取引の平均損益は${fmtMoney(rsiMid.averagePnl)}（n=${rsiMid.sampleSize}）でした。`,
     ));
   }
 
@@ -453,6 +646,83 @@ export function buildPerformanceIntelligence(
     calculateContextSummary("trending_mixed", "trending × MTF混在", crossBuckets.trending_mixed),
   ].filter(group => group.sampleSize > 0);
 
+  // --- Task103: individual timeframe / SMA / RSI from saved snapshots only ---
+  const tfTrendBuckets: Record<string, Trade[]> = {};
+  for (const tf of INDIVIDUAL_TF_ORDER) {
+    for (const trend of TF_TREND_ORDER) {
+      tfTrendBuckets[`${tf}:${trend}`] = [];
+    }
+  }
+  const smaBuckets = emptyBuckets(SMA_CONTEXT_ORDER);
+  const rsiBuckets = emptyBuckets(RSI_BUCKET_ORDER);
+  let smaPresent = 0;
+  let rsiPresent = 0;
+  let technicalPricePresent = 0;
+
+  for (const trade of closed) {
+    for (const tf of INDIVIDUAL_TF_ORDER) {
+      const trend = savedTimeframeTrend(trade, tf);
+      if (trend) tfTrendBuckets[`${tf}:${trend}`]!.push(trade);
+    }
+    const point = savedTechnicalPoint(trade);
+    if (!point) continue;
+    technicalPricePresent += 1;
+    const smaKeys = classifySmaContexts(point);
+    if (smaKeys.length) {
+      smaPresent += 1;
+      for (const key of smaKeys) smaBuckets[key].push(trade);
+    }
+    if (finiteNumber(point.rsi14)) {
+      rsiPresent += 1;
+      rsiBuckets[classifyRsiBucket(point.rsi14)].push(trade);
+    }
+  }
+
+  const byTimeframe: IndividualTimeframePerformance[] = INDIVIDUAL_TF_ORDER.map(tf => {
+    const byTrend = TF_TREND_ORDER
+      .map(trend => calculateContextSummary(
+        `${tf}:${trend}`,
+        `${INDIVIDUAL_TF_LABELS[tf]} ${TF_TREND_LABELS[trend]}`,
+        tfTrendBuckets[`${tf}:${trend}`] ?? [],
+      ))
+      .filter(group => group.sampleSize > 0);
+    const eligibleWithFrame = byTrend.reduce((sum, group) => sum + group.sampleSize, 0);
+    const missingFrame = Math.max(0, closed.length - eligibleWithFrame);
+    const noDataReason = !mtfPresent
+      ? TIMEFRAME_NO_MTF
+      : eligibleWithFrame === 0
+        ? TIMEFRAME_NO_FRAME
+        : null;
+    return {
+      timeframe: tf,
+      label: INDIVIDUAL_TF_LABELS[tf],
+      eligibleWithFrame,
+      missingFrame,
+      byTrend,
+      noDataReason,
+    };
+  });
+
+  const timeframeTrendSummaries = byTimeframe.flatMap(block => block.byTrend);
+
+  const smaGroups = SMA_CONTEXT_ORDER
+    .map(key => calculateContextSummary(key, SMA_CONTEXT_LABELS[key], smaBuckets[key]))
+    .filter(group => group.sampleSize > 0);
+  const rsiGroups = RSI_BUCKET_ORDER
+    .map(key => calculateContextSummary(key, RSI_BUCKET_LABELS[key], rsiBuckets[key]))
+    .filter(group => group.sampleSize > 0);
+
+  const smaNoData = !technicalPricePresent
+    ? TECHNICAL_NO_PRICE
+    : smaPresent === 0
+      ? TECHNICAL_NO_SMA
+      : null;
+  const rsiNoData = !technicalPricePresent
+    ? TECHNICAL_NO_PRICE
+    : rsiPresent === 0
+      ? TECHNICAL_NO_RSI
+      : null;
+
   const stats = summarize(closed);
   const regimeCoverage = {
     ...coverage(regimePresent, closed.length),
@@ -468,6 +738,9 @@ export function buildPerformanceIntelligence(
     mtf: mtfAnalysis,
     aiDirection: aiDirectionGroups,
     preTrade: preTradeAnalysis,
+    timeframeSummaries: timeframeTrendSummaries,
+    smaGroups,
+    rsiGroups,
   });
 
   return {
@@ -492,6 +765,8 @@ export function buildPerformanceIntelligence(
       coverage: rCoverage,
       totalR: rSummary.totalR,
       averageR: rSummary.averageR,
+      positiveRCount: rSummary.positiveR,
+      negativeRCount: rSummary.negativeR,
       distribution,
     },
     aiDirection: { groups: aiDirectionGroups },
@@ -515,6 +790,23 @@ export function buildPerformanceIntelligence(
       byVolatility: volatilitySummaries,
     },
     cross: { regimeMtf },
+    timeframe: {
+      coverage: coverage(mtfPresent, closed.length),
+      missingMtf: Math.max(0, closed.length - mtfPresent),
+      byTimeframe,
+    },
+    technical: {
+      sma: {
+        coverage: coverage(smaPresent, closed.length),
+        groups: smaGroups,
+        noDataReason: smaNoData,
+      },
+      rsi: {
+        coverage: coverage(rsiPresent, closed.length),
+        groups: rsiGroups,
+        noDataReason: rsiNoData,
+      },
+    },
     observations,
   };
 }
