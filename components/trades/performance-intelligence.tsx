@@ -20,6 +20,7 @@ import type { ContextPerformanceGroup } from "@/lib/trades/pre-trade-performance
 import type { Trade } from "@/lib/trades/types";
 import { Panel } from "../dashboard/panels";
 import { money, tone } from "./format";
+import { TradeEvolutionSection } from "./trade-evolution";
 
 function MetricCard({
   label,
@@ -281,6 +282,8 @@ export function PerformanceIntelligencePanel({
           </section>
         </>
       )}
+
+      <TradeEvolutionSection trades={trades} periodLabel={periodLabel} />
     </Panel>
   );
 }

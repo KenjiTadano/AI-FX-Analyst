@@ -470,6 +470,9 @@ h2 { font-size: 17px; font-weight: 600; margin-top: 4px; }
 .pi-timeframe-stack { display: grid; gap: 12px; min-width: 0; }
 .pi-timeframe-block { min-width: 0; }
 .pi-timeframe-block > h4 { margin: 0 0 4px; font-size: 13px; }
+.trade-evolution-section, .te-dimension, .te-cards { min-width: 0; }
+.te-dimension { margin-top: 12px; }
+.te-dimension > h4 { font-size: 13px; margin: 0 0 6px; overflow-wrap: anywhere; }
 .market-context-snapshot { margin: 12px 0; min-width: 0; }
 .market-context-meta { display: grid; gap: 6px; margin: 8px 0; font-size: 13px; }
 .market-context-meta > div { display: grid; grid-template-columns: 7.5rem 1fr; gap: 8px; min-width: 0; }

@@ -128,4 +128,30 @@ test.describe("performance intelligence", () => {
     await expect(page.getByTestId("pi-rsi")).toBeVisible();
     await expect(page.getByTestId("pi-cross")).toBeVisible();
   });
+
+  test("11 trade evolution section with selection bias and timing caveat", async ({ page }) => {
+    await openDashboard(page, { tradeSet: "performance-intelligence" });
+    await openPerformance(page);
+    await expect(page.getByTestId("trade-evolution")).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Trade Evolution" })).toBeVisible();
+    await expect(page.getByTestId("te-selection-bias")).toContainText("手動で再取得した");
+    await expect(page.getByTestId("te-timing-caveat")).toContainText("再取得タイミングはトレードごとに異なります");
+    await expect(page.getByTestId("te-coverage")).toBeVisible();
+    await expect(page.getByTestId("te-coverage-closed")).toBeVisible();
+    await expect(page.getByTestId("te-coverage-original")).toBeVisible();
+    await expect(page.getByTestId("te-coverage-revision")).toBeVisible();
+    await expect(page.getByTestId("te-coverage-eligible")).toBeVisible();
+    const body = await page.getByTestId("trade-evolution").innerText();
+    for (const phrase of [...forbidden, "決済すべき", "損切りサイン", "勝ちやすい", "best", "worst"]) {
+      expect(body).not.toContain(phrase);
+    }
+  });
+
+  test("12 trade evolution mobile no overflow", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await openDashboard(page, { tradeSet: "performance-intelligence" });
+    await openPerformance(page);
+    await expect(page.getByTestId("trade-evolution")).toBeVisible();
+    await assertNoOverflow(page);
+  });
 });
