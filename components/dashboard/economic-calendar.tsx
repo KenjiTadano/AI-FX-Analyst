@@ -28,6 +28,9 @@ export function EconomicCalendar({ resource, now, error }: { resource?: DataReso
     <ul>{events.slice(0, 5).map(event => <CalendarCard key={event.id} event={event} now={now} />)}</ul>
     {events.length > 5 && <details className="material-more"><summary>ほか{events.length - 5}件を見る</summary><ul>{events.slice(5).map(event => <CalendarCard key={event.id} event={event} now={now} />)}</ul></details>}
     <p className="material-source">{resource?.provider}{resource?.fetchedAt ? ` · 取得 ${formatJst(resource.fetchedAt)}` : ""}</p>{resource?.warnings.map(w => <p className="footnote" key={w}>{w}</p>)}
+    {resource?.provider === "FinanceCalendar" && (
+      <p className="footnote">Data: <a href="https://www.financecalendar.com" target="_blank" rel="noopener noreferrer">FinanceCalendar</a></p>
+    )}
     <p className="footnote">前日〜7日先 · highは30分前〜15分後、mediumは15分前〜5分後に待機。配信の遅延・変更があります。</p>
   </section>;
 }

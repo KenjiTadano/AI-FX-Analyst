@@ -7,7 +7,9 @@ export function calendarWithFallback(primary: EconomicCalendarProvider, fallback
     const first = await read(primary);
     if (["ok", "empty"].includes(first.status) && first.data !== null) return first;
     const second = await read(fallback);
-    if (["ok", "empty"].includes(second.status) && second.data !== null) return { ...second, warnings: [...second.warnings, "Trading Economicsは未取得のためFinnhubを使用しています。"] };
+    if (["ok", "empty"].includes(second.status) && second.data !== null) {
+      return { ...second, warnings: [...second.warnings, "上位の経済カレンダー取得元が利用できなかったため、代替取得元を使用しています。"] };
+    }
     if (first.error?.code === "not_configured") return second.error?.code === "disabled" ? first : second;
     return first;
   } };
