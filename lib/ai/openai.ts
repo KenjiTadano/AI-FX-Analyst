@@ -68,13 +68,17 @@ const isText = (value: unknown): value is string => typeof value === "string" &&
 const isList = (value: unknown): value is string[] => Array.isArray(value) && value.length <= 12 && value.every(isText);
 const factorRequired = interpretationSchema.properties.factors.items.required;
 
+const technicalSplitEvidence = new Set(["technical:chart_image", "technical:mtf", "technical:regime"]);
+
 /**
- * When chart evidence is attached, models sometimes emit two `technical` factors and omit another category.
- * Prompt already forbids this; coalesce only that case so chart-backed analysis does not fall back.
+ * OpenAI's JSON schema can require five factors but cannot require unique categories.
+ * With chart, MTF, or regime evidence, models sometimes emit a second `technical` factor and drop another category.
+ * Prompt already forbids this. Coalesce only that shape so the strict unique-category check still runs afterward.
+ * Missing categories become unknown with no evidence. Directions are not invented.
  */
 export function coerceInterpretationFactors(value: unknown, input: AnalysisInput): unknown {
   if (!isRecord(value) || !Array.isArray(value.factors) || value.factors.length !== 5) return value;
-  if (!input.fundamentalData.some(item => item.id === "technical:chart_image")) return value;
+  if (!input.fundamentalData.some(item => technicalSplitEvidence.has(item.id))) return value;
   if (!value.factors.every(isRecord)) return value;
   const technicals = value.factors.filter(factor => factor.category === "technical");
   if (technicals.length < 2) return value;

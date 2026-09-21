@@ -199,7 +199,11 @@ test("duplicate technical factors and empty source fail with actionable reasons"
     ],
   };
   assert.equal(interpretationFailureReason(duplicatedWithinFive, snapshot), "factor_1_duplicate_category:technical");
-  assert.throws(() => validateInterpretation(duplicatedWithinFive, snapshot));
+  const withoutSplitEvidence = {
+    ...snapshot,
+    fundamentalData: snapshot.fundamentalData.filter(item => !["technical:chart_image", "technical:mtf", "technical:regime"].includes(item.id)),
+  };
+  assert.throws(() => validateInterpretation(duplicatedWithinFive, withoutSplitEvidence));
   const emptySource = structuredClone(valid);
   emptySource.factors[1].source = "";
   assert.equal(interpretationFailureReason(emptySource, snapshot), "factor_1_bad_source");
@@ -238,6 +242,33 @@ test("chart-backed duplicate technical factors are coalesced before validation",
   assert.equal(validateInterpretation(duplicatedWithinFive, snapshot).factors.filter(factor => factor.category === "technical").length, 1);
   assert.equal(validateInterpretation(duplicatedWithinFive, snapshot).factors.length, 5);
   assert.match(validateInterpretation(duplicatedWithinFive, snapshot).factors.find(factor => factor.category === "technical")!.reason, /\//);
+});
+test("live MTF and regime evidence coalesces a duplicate technical factor without inventing direction", () => {
+  const snapshot = buildInput("USD/JPY", market(), fundamentals(), now);
+  assert.ok(snapshot.fundamentalData.some(item => item.id === "technical:mtf"));
+  assert.ok(snapshot.fundamentalData.some(item => item.id === "technical:regime"));
+  const valid = interpretation(snapshot, "neutral");
+  const omitted = valid.factors.find(factor => factor.category === "market_environment")!;
+  const duplicated = {
+    ...valid,
+    factors: [
+      valid.factors.find(factor => factor.category === "technical")!,
+      { ...valid.factors.find(factor => factor.category === "technical")!, title: "MTF", source: "Twelve Data", evidenceIds: ["technical:mtf", "technical:regime"] },
+      valid.factors.find(factor => factor.category === "news")!,
+      valid.factors.find(factor => factor.category === "economic")!,
+      valid.factors.find(factor => factor.category === "central_bank")!,
+    ],
+  };
+  assert.equal(interpretationFailureReason(duplicated, snapshot), "factor_1_duplicate_category:technical");
+  const parsed = validateInterpretation(duplicated, snapshot);
+  assert.equal(parsed.factors.length, 5);
+  assert.deepEqual(parsed.factors.map(factor => factor.category), [...factorCategories]);
+  assert.equal(parsed.factors.filter(factor => factor.category === "technical").length, 1);
+  const stub = parsed.factors.find(factor => factor.category === omitted.category)!;
+  assert.equal(stub.direction, "unknown");
+  assert.deepEqual(stub.evidenceIds, []);
+  assert.ok(parsed.factors.find(factor => factor.category === "technical")!.evidenceIds.includes("technical:mtf"));
+  assert.equal("action" in parsed, false);
 });
 test("FRED macro evidence can ground economic factor even when calendar DQ is missing", () => {
   const snapshot = buildInput("USD/JPY", market(), fundamentals(), now);

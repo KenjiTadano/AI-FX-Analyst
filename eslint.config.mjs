@@ -16,6 +16,8 @@ const eslintConfig = defineConfig([
     "playwright.config.ts",
     "playwright-report/**",
     "test-results/**",
+    // Local `supabase start` writes generated runtime files here.
+    "supabase/.temp/**",
   ]),
 ]);
 
