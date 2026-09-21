@@ -1,6 +1,5 @@
 import { ResourceCache } from "../../fundamental/cache";
 import { ProviderError } from "../../fundamental/resource";
-import type { EconomicEvent } from "../../fundamental/types";
 import type { EconomicCalendarProvider } from "../provider";
 import { normalizeFinanceCalendar } from "../finance-calendar-normalize";
 import { calendarTtl } from "../risk-window";
