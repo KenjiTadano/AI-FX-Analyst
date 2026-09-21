@@ -3,6 +3,7 @@ import { categoryLabels } from "./input";
 import { directionValue, scoreDirection } from "./technical";
 import { generateScenario } from "./scenario";
 import type { AiProviderName } from "./provider";
+import type { PrimaryFailureMeta } from "./interpret-types";
 import { factorCategories, type AIAnalysis, type AIErrorCode, type AnalysisInput, type ModelInterpretation, type TradeSignal } from "./types";
 import { sanitizeStructuredEntryTrigger } from "./entry-trigger";
 
@@ -47,6 +48,7 @@ export type FinalizeAiMeta = {
   fallbackUsed?: boolean;
   latencyMs?: number | null;
   detail?: string | null;
+  primaryFailure?: PrimaryFailureMeta | null;
 };
 
 export function finalizeAnalysis(
@@ -113,6 +115,7 @@ export function finalizeAnalysis(
       actualModel: meta.actualModel ?? null,
       fallbackUsed: !!meta.fallbackUsed,
       latencyMs: meta.latencyMs ?? null,
+      primaryFailure: meta.fallbackUsed ? (meta.primaryFailure ?? null) : null,
     },
     chartEvidence: input.chartImageAnalysis ? {
       used: true,

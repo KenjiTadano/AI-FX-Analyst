@@ -341,6 +341,17 @@ export function AIExplanation({ response }: { response: AnalysisResponse | null 
           <p className="footnote" data-testid="ai-requested-model">Requested model: {data.ai.requestedModel ?? "—"}</p>
           <p className="footnote" data-testid="ai-actual-model">Actual model: {data.ai.actualModel ?? data.ai.model ?? "—"}</p>
           {data.ai.fallbackUsed ? <p className="footnote" data-testid="ai-fallback-used">Fallback: OpenAI を使用</p> : null}
+          {data.ai.fallbackUsed && data.ai.primaryFailure ? (
+            <>
+              <p className="footnote" data-testid="ai-primary-failure">Primary failure: {data.ai.primaryFailure.reason}</p>
+              {data.ai.primaryFailure.httpStatus != null ? (
+                <p className="footnote" data-testid="ai-primary-failure-http">HTTP: {data.ai.primaryFailure.httpStatus}</p>
+              ) : null}
+              {data.ai.primaryFailure.retryAfterSeconds != null ? (
+                <p className="footnote" data-testid="ai-primary-failure-retry">Retry after: {data.ai.primaryFailure.retryAfterSeconds} sec</p>
+              ) : null}
+            </>
+          ) : null}
           {data.ai.latencyMs != null ? <p className="footnote" data-testid="ai-latency">Latency: {data.ai.latencyMs} ms</p> : null}
         </details>
       </>}

@@ -122,6 +122,12 @@ export interface AIAnalysis {
     actualModel?: string | null;
     fallbackUsed?: boolean;
     latencyMs?: number | null;
+    /** OpenRouter primary failure when fallbackUsed. Safe categories only. */
+    primaryFailure?: {
+      reason: "api_error" | "rate_limited" | "timeout" | "invalid_response" | "not_configured";
+      httpStatus: number | null;
+      retryAfterSeconds: number | null;
+    } | null;
   };
   /** Present only when a validated ChartImageAnalysis was attached for this run. */
   chartEvidence?: { used: true; timeframe: string | null; trend: ChartImageAnalysis["trend"]["direction"]; qualityScore: number } | null;

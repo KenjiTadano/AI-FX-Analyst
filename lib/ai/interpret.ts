@@ -1,15 +1,39 @@
 import { AnalysisError, createOpenAICaller } from "./openai";
 import { resolveTextProvider, type AiProviderName, type Env } from "./provider";
-import type { InterpretCallResult, Interpreter } from "./interpret-types";
+import type { InterpretCallResult, Interpreter, PrimaryFailureMeta, PrimaryFailureReason } from "./interpret-types";
 import type { AnalysisInput } from "./types";
 
-export type { AiCallMeta, InterpretCallResult, Interpreter } from "./interpret-types";
+export type { AiCallMeta, InterpretCallResult, Interpreter, PrimaryFailureMeta, PrimaryFailureReason } from "./interpret-types";
 export { emptyAiMeta } from "./interpret-types";
 
-const FALLBACK_CODES = new Set(["api_error", "rate_limited", "timeout", "invalid_response", "not_configured"]);
+const FALLBACK_CODES = new Set<PrimaryFailureReason>(["api_error", "rate_limited", "timeout", "invalid_response", "not_configured"]);
 
 function clean(value: string | undefined): string {
   return value?.trim() ?? "";
+}
+
+/**
+ * Structure AnalysisError detail into client-safe fields.
+ * Accepts only http_NNN / retry_after_N patterns from classifyProviderHttp — never raw bodies/headers.
+ */
+export function toSafePrimaryFailure(error: unknown): PrimaryFailureMeta | null {
+  const code = error instanceof AnalysisError ? error.code : "api_error";
+  if (!FALLBACK_CODES.has(code as PrimaryFailureReason)) return null;
+  const detail = error instanceof AnalysisError ? (error.detail ?? "") : "";
+  if (/sk-|api[_-]?key|bearer\s|authorization/i.test(detail)) {
+    return { reason: code as PrimaryFailureReason, httpStatus: null, retryAfterSeconds: null };
+  }
+  const httpMatch = detail.match(/\bhttp_(\d{3})\b/);
+  const retryMatch = detail.match(/\bretry_after_(\d+)\b/);
+  const httpStatus = httpMatch ? Number(httpMatch[1]) : null;
+  const retryAfterSeconds = retryMatch ? Number(retryMatch[1]) : null;
+  return {
+    reason: code as PrimaryFailureReason,
+    httpStatus: httpStatus != null && httpStatus >= 400 && httpStatus < 600 ? httpStatus : null,
+    retryAfterSeconds: retryAfterSeconds != null && Number.isFinite(retryAfterSeconds) && retryAfterSeconds >= 0 && retryAfterSeconds <= 86_400
+      ? retryAfterSeconds
+      : null,
+  };
 }
 
 /** OpenAI direct path used only as OpenRouter fallback (or primary when AI_PROVIDER=openai). */
@@ -78,6 +102,7 @@ export function createTextInterpreter(options: {
           actualModel: result.actualModel,
           fallbackUsed: false,
           latencyMs: result.latencyMs,
+          primaryFailure: null,
         },
       };
     }
@@ -94,12 +119,14 @@ export function createTextInterpreter(options: {
             actualModel: result.actualModel,
             fallbackUsed: false,
             latencyMs: result.latencyMs,
+            primaryFailure: null,
           },
         };
       } catch (error) {
         const code = error instanceof AnalysisError ? error.code : "api_error";
-        if (!openaiCaller || !FALLBACK_CODES.has(code)) throw error;
+        if (!openaiCaller || !FALLBACK_CODES.has(code as PrimaryFailureReason)) throw error;
         // One OpenAI attempt only. Do not re-call OpenRouter.
+        const primaryFailure = toSafePrimaryFailure(error) ?? { reason: code as PrimaryFailureReason, httpStatus: null, retryAfterSeconds: null };
         const result = await openaiCaller(input);
         return {
           interpretation: result.interpretation,
@@ -109,6 +136,7 @@ export function createTextInterpreter(options: {
             actualModel: result.actualModel,
             fallbackUsed: true,
             latencyMs: result.latencyMs,
+            primaryFailure,
           },
         };
       }
@@ -124,6 +152,7 @@ export function createTextInterpreter(options: {
           actualModel: result.actualModel,
           fallbackUsed: true,
           latencyMs: result.latencyMs,
+          primaryFailure: { reason: "not_configured", httpStatus: null, retryAfterSeconds: null },
         },
       };
     }

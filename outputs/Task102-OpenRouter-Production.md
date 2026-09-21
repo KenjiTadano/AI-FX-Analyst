@@ -50,11 +50,11 @@ Task102 で追加した薄い層:
 | `lib/ai/provider.ts` | `Env` type export（既存 logic 維持） |
 | `lib/ai/client.ts` | `createTextInterpreter` へ接続 |
 | `lib/ai/service.ts` | InterpretCallResult unwrap、detail/meta 保持 |
-| `lib/ai/engine.ts` | 402/429 メッセージ、meta → `ai.*` |
-| `lib/ai/types.ts` | `requestedModel` / `actualModel` / `fallbackUsed` / `latencyMs` |
-| `components/dashboard/ai-analysis.tsx` | details に Provider / Model（メイン画面は非表示） |
+| `lib/ai/engine.ts` | 402/429 メッセージ、meta → `ai.*`（`primaryFailure` 含む） |
+| `lib/ai/types.ts` | `requestedModel` / `actualModel` / `fallbackUsed` / `latencyMs` / `primaryFailure` |
+| `components/dashboard/ai-analysis.tsx` | details に Provider / Model / Primary failure（fallback 時のみ） |
 | `.env.example` | `openrouter/free` 例 + fallback 注記 |
-| `tests/openrouter-production.test.ts` | **new** 14+ cases |
+| `tests/openrouter-production.test.ts` | Task102 + Production Smoke fallback reason cases |
 
 ---
 
@@ -166,8 +166,47 @@ Task034 を維持:
 
 - 既存 AI status UI を利用
 - `<details>`「AI Provider / Model」に provider / requested / actual / fallback / latency
+- fallback 時のみ Primary failure（reason / HTTP / Retry-After）を同 details 内に表示
 - メイン画面をモデル名だらけにしない
 - AI 失敗時に「AIがWAITと判断した」とは出さない（Task034 の分離維持）
+
+---
+
+## Production Smoke — fallback reason visibility
+
+Vercel Production で確認:
+
+- Requested model: `openrouter/free`
+- Actual model: `gpt-4.1-mini-2025-04-14`
+- Fallback: OpenAI を使用
+
+→ OpenRouter primary 失敗後の OpenAI fallback が動作している。
+
+### Fix（本追記）
+
+fallback 時のみ、既存「AI Provider / Model」details に安全な primary failure を表示:
+
+```
+Primary failure: rate_limited
+HTTP: 429
+Retry after: 120 sec
+```
+
+| 項目 | 内容 |
+| --- | --- |
+| metadata | `ai.primaryFailure = { reason, httpStatus, retryAfterSeconds }` |
+| reason 許可 | `api_error` / `rate_limited` / `timeout` / `invalid_response` / `not_configured` のみ |
+| HTTP / Retry-After | 既存 `http_NNN` / `retry_after_N` detail から構造化（生ヘッダ・body は出さない） |
+| 表示条件 | `fallbackUsed === true` のときのみ。success 時は `null` |
+| 非変更 | AI 判定ロジック、request 回数（最大 1+1）、cache / pending / rate limit |
+
+変更ファイル（追記分）:
+
+- `lib/ai/interpret-types.ts` — `PrimaryFailureMeta`
+- `lib/ai/interpret.ts` — `toSafePrimaryFailure` + fallback meta 付与
+- `lib/ai/engine.ts` / `lib/ai/types.ts` — finalize → `ai.primaryFailure`
+- `components/dashboard/ai-analysis.tsx` — details 表示
+- `tests/openrouter-production.test.ts` — 402/429/timeout/invalid/not_configured/success/secret/1+1
 
 ---
 
@@ -177,6 +216,7 @@ Task034 を維持:
 | --- | --- |
 | `OPENROUTER_API_KEY` | ローカル `.env.local` に未設定（len=0） |
 | live connection | **SKIP** |
+| Vercel Production | fallback 発生を確認（上記）。reason 表示は本 fix デプロイ後に確認 |
 
 キー設定後の推奨 smoke（1 回のみ）:
 
@@ -191,15 +231,27 @@ actual model が取れた場合は model ID のみ記録可。
 
 ## Unit / E2E / build
 
+### Task102 初回
+
 | 項目 | 結果 |
 | --- | --- |
 | `npm run lint` | PASS（exit 0）。既存 warning 1: `finance-calendar.ts` unused import（Task101 由来、本 task 非対象） |
-| `npm test` | **PASS 1048** / fail 0（Task101 baseline 1035 を下回らない。+13） |
-| `npm run test:e2e` | **PASS 331 + 1 flaky**（exit 0）。実質 332 本。baseline 332 を維持 |
+| `npm test` | **PASS 1048** / fail 0 |
+| `npm run test:e2e` | **PASS 331 + 1 flaky**（exit 0）。実質 332 |
 | `npm run build` | PASS（Next.js 16.3.4） |
 | `git diff --check` | PASS |
 
-E2E 実行条件: `CI=1 E2E_PORT=3015`（port 3000 の既存 `next dev` を reuse すると「認証確認中…」で詰まる環境要因あり。コード回帰ではない）。flaky 1件は `exit-plan › 39 1280 no overflow` の timeout→retry 成功。
+### Production Smoke fix 後（再計測）
+
+| 項目 | 結果 |
+| --- | --- |
+| `npm run lint` | PASS（exit 0）。同上 warning 1 |
+| `npm test` | **PASS 1054** / fail 0（baseline 1048 を下回らない） |
+| `npm run test:e2e` | **PASS 332**（`CI=1 E2E_PORT=3015`） |
+| `npm run build` | PASS |
+| `git diff --check` | PASS |
+
+commit / push: していない。
 
 ---
 
@@ -209,7 +261,8 @@ E2E 実行条件: `CI=1 E2E_PORT=3015`（port 3000 の既存 `next dev` を reus
 2. `openrouter/free` は実モデルが変動し、structured output 非対応モデルが選ばれると `invalid_response` になる（修復しない）
 3. OpenRouter 失敗時の OpenAI fallback はコストが発生し得る（明示設定時のみ）
 4. Chart vision は `OPENROUTER_CHART_MODEL` 必須。free text router では chart は動かない
-5. live smoke はキー未設定のため SKIP
+5. live smoke（ローカルキー）は未設定のため SKIP
+6. Production で primary failure 表示を見るには本 fix のデプロイが必要
 
 ---
 

@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { AnalysisError, createOpenAI, createOpenAICaller, extractResponseModel } from "../lib/ai/openai";
-import { createTextInterpreter } from "../lib/ai/interpret";
+import { createTextInterpreter, toSafePrimaryFailure } from "../lib/ai/interpret";
 import { aiMessage, finalizeAnalysis } from "../lib/ai/engine";
 import { resolveChartProvider, resolveTextProvider } from "../lib/ai/provider";
 import { buildInput } from "../lib/ai/input";
@@ -33,6 +33,36 @@ function chatOk(model = "meta-llama/test-actual", text = validJson()) {
     model,
     choices: [{ message: { role: "assistant", content: text } }],
   });
+}
+
+function openAiOk(model = "gpt-4.1-mini") {
+  return Response.json({
+    status: "completed",
+    model,
+    output: [{ type: "message", content: [{ type: "output_text", text: validJson() }] }],
+  });
+}
+
+const fallbackEnv = {
+  AI_PROVIDER: "openrouter",
+  OPENROUTER_API_KEY: "or-key",
+  OPENROUTER_MODEL: "openrouter/free",
+  OPENAI_API_KEY: "oa-key",
+  OPENAI_ANALYSIS_MODEL: "gpt-4.1-mini",
+} as const;
+
+async function interpretWithFallback(openrouterResponse: () => Response | Promise<Response>) {
+  const urls: string[] = [];
+  const { interpret } = createTextInterpreter({
+    env: { ...fallbackEnv },
+    fetcher: async (url) => {
+      urls.push(String(url));
+      if (String(url).includes("openrouter")) return openrouterResponse();
+      return openAiOk("gpt-4.1-mini-2025-04-14");
+    },
+  });
+  const result = await interpret(input());
+  return { result, urls };
 }
 
 test("OpenRouter free requested model is env-driven and never hardcodes Gemini", () => {
@@ -146,46 +176,74 @@ test("invalid structured response is not repaired into BUY/SELL", async () => {
 });
 
 test("OpenRouter failure falls back to OpenAI at most once", async () => {
-  const urls: string[] = [];
-  const { interpret, enabled } = createTextInterpreter({
-    env: {
-      AI_PROVIDER: "openrouter",
-      OPENROUTER_API_KEY: "or-key",
-      OPENROUTER_MODEL: "openrouter/free",
-      OPENAI_API_KEY: "oa-key",
-      OPENAI_ANALYSIS_MODEL: "gpt-4.1-mini",
-    },
-    fetcher: async (url) => {
-      urls.push(String(url));
-      if (String(url).includes("openrouter")) return new Response("no", { status: 402 });
-      return Response.json({
-        status: "completed",
-        model: "gpt-4.1-mini",
-        output: [{ type: "message", content: [{ type: "output_text", text: validJson() }] }],
-      });
-    },
-  });
-  assert.equal(enabled, true);
-  const result = await interpret(input());
+  const { result, urls } = await interpretWithFallback(() => new Response("SECRET-BODY", { status: 402, headers: { "retry-after": "20", "x-request-id": "abc" } }));
   assert.equal(urls.length, 2);
   assert.ok(urls[0]!.includes("openrouter"));
   assert.ok(urls[1]!.includes("api.openai.com"));
   assert.equal(result.meta.fallbackUsed, true);
   assert.equal(result.meta.provider, "openai");
   assert.equal(result.meta.requestedModel, "openrouter/free");
-  assert.equal(result.meta.actualModel, "gpt-4.1-mini");
+  assert.equal(result.meta.actualModel, "gpt-4.1-mini-2025-04-14");
+  assert.deepEqual(result.meta.primaryFailure, { reason: "api_error", httpStatus: 402, retryAfterSeconds: 20 });
+  assert.equal(JSON.stringify(result.meta).includes("SECRET-BODY"), false);
+  assert.equal(JSON.stringify(result.meta).includes("x-request-id"), false);
   assert.equal(result.interpretation.preferWait, true);
+});
+
+test("402 fallback reason is visible in finalize details meta", async () => {
+  const { result } = await interpretWithFallback(() => new Response("no", { status: 402, headers: { "retry-after": "30" } }));
+  const analysis = finalizeAnalysis(input(), result.interpretation, "openrouter/free", null, now, "openrouter", result.meta);
+  assert.equal(analysis.ai.fallbackUsed, true);
+  assert.deepEqual(analysis.ai.primaryFailure, { reason: "api_error", httpStatus: 402, retryAfterSeconds: 30 });
+});
+
+test("429 fallback reason includes Retry-After", async () => {
+  const { result, urls } = await interpretWithFallback(() => new Response("no", { status: 429, headers: { "retry-after": "120" } }));
+  assert.equal(urls.length, 2);
+  assert.deepEqual(result.meta.primaryFailure, { reason: "rate_limited", httpStatus: 429, retryAfterSeconds: 120 });
+});
+
+test("timeout fallback reason", async () => {
+  const { result, urls } = await interpretWithFallback(async () => {
+    throw new DOMException("timeout", "TimeoutError");
+  });
+  assert.equal(urls.length, 2);
+  assert.deepEqual(result.meta.primaryFailure, { reason: "timeout", httpStatus: null, retryAfterSeconds: null });
+});
+
+test("invalid_response fallback reason", async () => {
+  const { result, urls } = await interpretWithFallback(() => chatOk("m", JSON.stringify({ summary: "x", action: "BUY" })));
+  assert.equal(urls.length, 2);
+  assert.equal(result.meta.primaryFailure?.reason, "invalid_response");
+  assert.equal(result.meta.primaryFailure?.httpStatus, null);
+  assert.equal(JSON.stringify(result.meta.primaryFailure).includes("BUY"), false);
+});
+
+test("not_configured fallback reason", async () => {
+  let openaiCalls = 0;
+  const { interpret } = createTextInterpreter({
+    env: {
+      AI_PROVIDER: "openrouter",
+      OPENROUTER_API_KEY: "",
+      OPENROUTER_MODEL: "",
+      OPENAI_API_KEY: "oa-key",
+      OPENAI_ANALYSIS_MODEL: "gpt-4.1-mini",
+    },
+    fetcher: async () => {
+      openaiCalls += 1;
+      return openAiOk();
+    },
+  });
+  const result = await interpret(input());
+  assert.equal(openaiCalls, 1);
+  assert.equal(result.meta.fallbackUsed, true);
+  assert.deepEqual(result.meta.primaryFailure, { reason: "not_configured", httpStatus: null, retryAfterSeconds: null });
 });
 
 test("OpenRouter success does not call OpenAI", async () => {
   const urls: string[] = [];
   const { interpret } = createTextInterpreter({
-    env: {
-      AI_PROVIDER: "openrouter",
-      OPENROUTER_API_KEY: "or-key",
-      OPENROUTER_MODEL: "openrouter/free",
-      OPENAI_API_KEY: "oa-key",
-    },
+    env: { ...fallbackEnv },
     fetcher: async (url) => {
       urls.push(String(url));
       return chatOk("routed/model-a");
@@ -197,6 +255,9 @@ test("OpenRouter success does not call OpenAI", async () => {
   assert.equal(result.meta.fallbackUsed, false);
   assert.equal(result.meta.provider, "openrouter");
   assert.equal(result.meta.actualModel, "routed/model-a");
+  assert.equal(result.meta.primaryFailure, null);
+  const analysis = finalizeAnalysis(input(), result.interpretation, "openrouter/free", null, now, "openrouter", result.meta);
+  assert.equal(analysis.ai.primaryFailure, null);
 });
 
 test("missing OpenRouter config stays unavailable unless OpenAI fallback is configured", async () => {
@@ -218,11 +279,7 @@ test("missing OpenRouter config stays unavailable unless OpenAI fallback is conf
     },
     fetcher: async () => {
       openaiCalls += 1;
-      return Response.json({
-        status: "completed",
-        model: "gpt-4.1-mini",
-        output: [{ type: "message", content: [{ type: "output_text", text: validJson() }] }],
-      });
+      return openAiOk();
     },
   });
   assert.equal(withOpenAI.enabled, true);
@@ -230,6 +287,14 @@ test("missing OpenRouter config stays unavailable unless OpenAI fallback is conf
   assert.equal(openaiCalls, 1);
   assert.equal(result.meta.fallbackUsed, true);
   assert.equal(result.meta.provider, "openai");
+  assert.equal(result.meta.primaryFailure?.reason, "not_configured");
+});
+
+test("toSafePrimaryFailure never exposes secrets or raw bodies", () => {
+  const failure = toSafePrimaryFailure(new AnalysisError("api_error", "http_402:retry_after_20:sk-secret-leak"));
+  assert.deepEqual(failure, { reason: "api_error", httpStatus: null, retryAfterSeconds: null });
+  const ok = toSafePrimaryFailure(new AnalysisError("rate_limited", "http_429:retry_after_15"));
+  assert.deepEqual(ok, { reason: "rate_limited", httpStatus: 429, retryAfterSeconds: 15 });
 });
 
 test("chart model missing keeps imageCapable false", () => {
