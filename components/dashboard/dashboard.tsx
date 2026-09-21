@@ -81,15 +81,15 @@ export function Dashboard({ analyses, account }: { analyses: FxAnalysis[]; accou
   const analysis = analyses.find(item => item.pair === selectedPair) ?? analyses[0];
   if (!analysis) return <main className="dashboard-shell"><p>分析データがありません。</p></main>;
   return <>
-    <header className="app-header"><div className="header-inner"><Link className="brand" href="/" aria-label="AI FX Analyst ホーム"><span className="brand-icon" aria-hidden="true">↗</span><span>AI FX <span className="brand-light">Analyst</span></span></Link><span className="demo-badge"><span />MVP / TASK 033</span></div></header>
+    <header className="app-header"><div className="header-inner"><Link className="brand" href="/" aria-label="AI-FX-Analyst ホーム"><span className="brand-icon" aria-hidden="true">↗</span><span>AI-FX-<span className="brand-light">Analyst</span></span></Link><span className="product-badge" data-testid="product-badge"><span />Reference</span></div></header>
     <main className="dashboard-shell" id="main-content">
-      <div className="page-heading"><div><p className="eyebrow">YOUR MARKET, AT A GLANCE</p><h1>マーケットの今を、ひと目で。</h1><p className="muted">相場の方向性とリスクを、一つのダッシュボードに。</p></div><span className="workspace-label">FX ANALYSIS / 01</span></div>
-      <div className="demo-notice"><span className="notice-icon" aria-hidden="true">i</span><p><strong>レート・テクニカルはTwelve Data</strong><span>AI総合判定は取得済みデータから分析。チャート画像は補助Evidenceです。AI未取得・データ不足時は待機します。無料枠は1日800クレジットのため、常時更新には上限があります。</span></p></div>
+      <div className="page-heading"><div><p className="eyebrow">TRADING DECISION SUPPORT</p><h1>判断材料を、ひと目で。</h1><p className="muted">Direction と Action は別です。参考情報であり、自動売買ではありません。</p></div></div>
+      <div className="demo-notice" data-testid="product-notice"><span className="notice-icon" aria-hidden="true">i</span><p><strong>データとAIは参考情報です</strong><span>市場データ・AI判定・過去事例は判断補助です。売買推奨や注文実行ではありません。</span></p></div>
       <AuthStatus />
-      <section className="market-panel" aria-label="通貨ペアと現在レート" data-testid="market-context"><div className="pair-control"><label htmlFor="currency-pair">通貨ペア</label><select id="currency-pair" value={analysis.pair} onChange={event => changePair(event.target.value)}>{analyses.map(item => <option key={item.pair} value={item.pair}>{item.pair}</option>)}</select><p data-testid="dashboard-pair">{analysis.pair}</p></div><div className="rate-block"><span className="muted">現在レート <span className="mini-label">{quote?.stale ? "STALE" : quote?.data != null ? "FRESH" : market?.error ? "ERROR" : "LOADING"}</span></span><div className="rate-value">{quote?.data != null ? quote.data.toFixed(analysis.decimals) : "—"}<small>{analysis.quoteCurrency}</small></div><p className="footnote" role="status" data-testid="market-status">{market?.error || quote?.error || (market ? "60秒キャッシュ · 前日比は未取得" : "取得中…")}</p>{quote?.stale && <p className="negative footnote">更新失敗・最終取得値を表示</p>}<p className="footnote">取得: {quote?.fetchedAt ? new Date(quote.fetchedAt).toLocaleString("ja-JP") : "—"}</p></div><div className="snapshot"><span className="eyebrow">MARKET</span><p>表示中: {analysis.pair}</p><span className="muted">レート60秒 / OHLC 5分キャッシュ</span></div></section>
+      <section className="market-panel" aria-label="通貨ペアと現在レート" data-testid="market-context"><div className="pair-control"><label htmlFor="currency-pair">通貨ペア</label><select id="currency-pair" value={analysis.pair} onChange={event => changePair(event.target.value)}>{analyses.map(item => <option key={item.pair} value={item.pair}>{item.pair}</option>)}</select><p data-testid="dashboard-pair">{analysis.pair}</p></div><div className="rate-block"><span className="muted">現在レート <span className="mini-label" data-testid="market-freshness-label">{quote?.stale ? "STALE" : quote?.data != null ? "FRESH" : market?.error ? "ERROR" : "LOADING"}</span></span><div className="rate-value">{quote?.data != null ? quote.data.toFixed(analysis.decimals) : "—"}<small>{analysis.quoteCurrency}</small></div><p className="footnote" role="status" data-testid="market-status">{market?.error || quote?.error || (market ? "60秒キャッシュ · 前日比は未取得" : "取得中…")}</p>{quote?.stale && <p className="negative footnote" role="status" data-testid="market-stale-note">更新失敗・最終取得値を表示</p>}<p className="footnote">取得: {quote?.fetchedAt ? new Date(quote.fetchedAt).toLocaleString("ja-JP") : "—"}</p></div><div className="snapshot"><span className="eyebrow">MARKET</span><p>表示中: {analysis.pair}</p><span className="muted">レート60秒 / OHLC 5分キャッシュ</span></div></section>
       <NextEventBanner resource={fundamentals?.data?.calendar} />
-      <nav className="journal-nav" aria-label="ダッシュボード表示">{([["analysis", "分析"], ["chart", "チャート読取"], ["trades", "トレード"], ["performance", "成績"]] as const).map(([key, label]) => <button key={key} type="button" aria-current={view === key ? "page" : undefined} onClick={() => setView(key)}>{label}</button>)}</nav>
-      <p className="footnote ia-flow" data-testid="dashboard-flow">分析（市場 → AI判断 → トレード準備）→ トレード記録 → 成績。過去の取引は保存時点の情報のままです。</p>
+      <nav className="journal-nav" aria-label="ダッシュボード表示" data-testid="dashboard-tabs">{([["analysis", "分析"], ["chart", "チャート読取"], ["trades", "トレード"], ["performance", "成績"]] as const).map(([key, label]) => <button key={key} type="button" aria-current={view === key ? "page" : undefined} onClick={() => setView(key)}>{label}</button>)}</nav>
+      <p className="footnote ia-flow" data-testid="dashboard-flow">分析（判断ワークスペース → 詳細）→ トレード記録 → 成績。過去の取引は保存時点の情報のままです。</p>
       <div hidden={view !== "analysis"}>
         <section className="ia-section" aria-label="Trading Decision Workspace" data-testid="ia-decision-workspace">
           <TradingDecisionWorkspacePanel
@@ -112,22 +112,23 @@ export function Dashboard({ analyses, account }: { analyses: FxAnalysis[]; accou
             }
           />
         </section>
-        <section className="ia-section" aria-labelledby="ia-analysis" data-testid="ia-analysis">
-          <h2 id="ia-analysis">Analysis · {analysis.pair}</h2>
-          <p className="footnote">Direction と Action は別です。Direction が BUY/SELL でも Action が WAIT なら待機です。</p>
+        <section className="ia-section ia-section-detail" aria-labelledby="ia-analysis" data-testid="ia-analysis">
+          <h2 id="ia-analysis">Analysis detail · {analysis.pair}</h2>
+          <p className="footnote">Workspace と同じ Direction / Action の詳細です。Direction と Action は別です。</p>
           <div className="dashboard-grid decision-layout">
             <AIOverview response={aiResponse} pair={selectedPair} pendingChart={pendingChart} chartActive={!!activeChart} onExcludeChart={excludeChart} onRefresh={refreshAnalysis} refreshing={aiRefreshing} currentRate={liveRate} rateDecimals={analysis.decimals} />
           </div>
         </section>
-        <section className="ia-section" aria-labelledby="ia-setup" data-testid="ia-trade-setup">
-          <h2 id="ia-setup">Trade Setup · {analysis.pair}</h2>
-          <p className="footnote">準備度は既存の確認項目です。Trigger の条件成立はエントリー推奨ではありません。</p>
+        <section className="ia-section ia-section-detail" aria-labelledby="ia-setup" data-testid="ia-trade-setup">
+          <h2 id="ia-setup">Trade Setup detail · {analysis.pair}</h2>
+          <p className="footnote">Workspace の Readiness / Trigger / Event Risk の詳細です。Trigger 成立はエントリー推奨ではありません。</p>
           <div className="dashboard-grid decision-layout">
             <DailyTradingPlanPanel key={userId || "anon"} pair={selectedPair} analysis={aiResponse?.data && aiResponse.data.pair === selectedPair ? aiResponse.data : null} trades={trades} riskSettings={riskSettings} currentRate={liveRate} calendar={fundamentals?.data?.calendar} market={market?.data && market.data.symbol === selectedPair ? market.data : null} rateDecimals={analysis.decimals} userId={userId} onRefresh={refreshAnalysis} refreshing={aiRefreshing} onPlanContext={onPlanContext} />
           </div>
         </section>
-        <section className="ia-section" aria-labelledby="ia-market" data-testid="ia-market-detail">
-          <h2 id="ia-market">Market · {analysis.pair}</h2>
+        <section className="ia-section ia-section-detail" aria-labelledby="ia-market" data-testid="ia-market-detail">
+          <h2 id="ia-market">Market detail · {analysis.pair}</h2>
+          <p className="footnote">Workspace の MTF / Regime / 類似事例の詳細です。</p>
           <div className="dashboard-grid decision-layout">
             <TechnicalPanel data={market?.data ?? null} error={market?.error ?? null} />
             <MultiTimeframePanel pair={selectedPair} data={market?.data && market.data.symbol === selectedPair ? market.data : null} error={market?.error ?? null} />
@@ -158,7 +159,7 @@ export function Dashboard({ analyses, account }: { analyses: FxAnalysis[]; accou
       </div>
       <div hidden={view !== "chart"}><ChartAnalysisPanel pair={selectedPair} onPairChange={changePair} includedChart={pendingChart} onIncludeChart={includeChart} onExcludeChart={clearCharts} /></div>
       {auth.user ? <TradeJournal key={userId} userId={userId} view={view === "chart" ? "analysis" : view} pair={selectedPair} quote={quote?.data != null && quote.fetchedAt ? { pair: selectedPair, price: quote.data, fetchedAt: quote.fetchedAt, stale: !!quote.stale || !!quote.error } : null} analysis={aiResponse?.data ?? null} chartImageAnalysis={activeChart ?? pendingChart} market={market?.data && market.data.symbol === selectedPair ? market.data : null} initialBalance={journalBalance.userId === userId ? journalBalance.value : NaN} onTradesChange={setTrades} getPreTradeSource={getPreTradeSource} /> : view !== "analysis" && view !== "chart" && <LoginRequired />}
-      <footer className="page-footer"><span>AI FX Analyst</span><p>分析は条件付きの参考情報です。WAITも正常な判断です。</p><span>PROTOTYPE / TASK 033</span></footer>
+      <footer className="page-footer"><span>AI-FX-Analyst</span><p>分析は条件付きの参考情報です。WAITも正常な判断です。</p><span>Reference only</span></footer>
     </main>
   </>;
 }
