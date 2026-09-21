@@ -86,11 +86,15 @@ export function Performance({ trades, initialBalance }: { trades: Trade[]; initi
       <p className="material-empty journal-wide" role="status">この期間には取引記録がありません。</p>
     ) : (
       <>
-        <TradingReviewInsights trades={filteredTrades} periodLabel={label} />
-        <PreTradeContextPerformancePanel trades={filteredTrades} periodLabel={label} />
-        <MtfPerformancePanel trades={filteredTrades} periodLabel={label} />
-        <EntryTimingPanel trades={filteredTrades} periodLabel={label} />
-        <AiEntryContextPanel trades={filteredTrades} periodLabel={label} />
+        <details className="ia-disclosure journal-wide" open data-testid="performance-detail">
+          <summary>詳細な過去集計（Task032に含まれない項目を含む）</summary>
+          <p className="footnote">Trading Performance Intelligence が中心です。Entry Timing、AI方向とEntry位置、振り返り文、損益カレンダーなどはここに残しています。</p>
+          <TradingReviewInsights trades={filteredTrades} periodLabel={label} />
+          <PreTradeContextPerformancePanel trades={filteredTrades} periodLabel={label} />
+          <MtfPerformancePanel trades={filteredTrades} periodLabel={label} />
+          <EntryTimingPanel trades={filteredTrades} periodLabel={label} />
+          <AiEntryContextPanel trades={filteredTrades} periodLabel={label} />
+        </details>
         <Panel title="損益サマリー" eyebrow="REALIZED RESULTS" className="journal-wide">
           <p className="footnote">集計対象：{label}</p>
           <div className="journal-stats">{([

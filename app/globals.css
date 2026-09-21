@@ -208,7 +208,13 @@ h2 { font-size: 17px; font-weight: 600; margin-top: 4px; }
 
 /* Task007 journal: localized navigation preserves the existing analysis layout. */
 [hidden] { display: none !important; }
-.journal-nav { display: flex; gap: 8px; margin: 24px 0; }
+.ia-flow { margin: -8px 0 16px; }
+.ia-section { margin: 8px 0 20px; min-width: 0; }
+.ia-section > h2 { font-size: 18px; margin: 0 0 6px; overflow-wrap: anywhere; }
+.ia-disclosure { margin: 12px 0 20px; min-width: 0; border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; background: #121a28; }
+.ia-disclosure > summary { cursor: pointer; font-weight: 650; min-height: 42px; overflow-wrap: anywhere; }
+.ia-disclosure > summary:focus-visible { outline: 2px solid var(--green); outline-offset: 3px; }
+.journal-nav { display: flex; gap: 8px; margin: 24px 0; flex-wrap: wrap; }
 .journal-nav button, .journal-shell button { border: 1px solid #405169; border-radius: 7px; padding: 10px 16px; background: #172232; cursor: pointer; font-size: 13px; min-height: 42px; }
 .journal-nav button[aria-current], .journal-shell .journal-primary { background: #205346; border-color: #65d9bc; color: #defcf3; }
 .journal-shell button:disabled { opacity: .45; cursor: default; }
