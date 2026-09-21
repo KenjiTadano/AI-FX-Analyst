@@ -1,5 +1,6 @@
 import { factorCategories, type AIErrorCode, type AnalysisFactor, type AnalysisInput, type ModelInterpretation } from "./types";
 import { entryTriggerSchema, sanitizeStructuredEntryTrigger } from "./entry-trigger";
+import { classifyProviderHttp, retryAfterSeconds, type AiTransport } from "./provider";
 
 export class AnalysisError extends Error {
   constructor(public code: AIErrorCode, public detail?: string) {
@@ -161,38 +162,78 @@ function shouldExposeValidationDetail(): boolean {
   return process.env.NODE_ENV !== "production" || process.env.AI_VALIDATION_DEBUG === "1";
 }
 
-export function createOpenAI(config: { apiKey: string; model: string; timeoutMs?: number }, fetcher: typeof fetch = fetch) {
+function stripFence(text: string): string {
+  const trimmed = text.trim();
+  const fenced = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/);
+  return fenced?.[1] ?? trimmed;
+}
+
+function extractModelText(body: unknown): string | null {
+  if (!isRecord(body)) throw new AnalysisError("invalid_response", "upstream_status:non_object");
+  if (Array.isArray(body.choices)) {
+    const choice = body.choices[0];
+    if (!isRecord(choice) || !isRecord(choice.message) || typeof choice.message.content !== "string") return null;
+    return choice.message.content;
+  }
+  if (body.status !== "completed" || !Array.isArray(body.output)) {
+    throw new AnalysisError("invalid_response", `upstream_status:${String(body.status)}`);
+  }
+  const texts: string[] = [];
+  for (const item of body.output) {
+    if (!isRecord(item) || item.type !== "message" || !Array.isArray(item.content)) continue;
+    for (const part of item.content) {
+      if (isRecord(part) && part.type === "refusal") throw new AnalysisError("invalid_response", "model_refusal");
+      if (isRecord(part) && part.type === "output_text" && typeof part.text === "string") texts.push(part.text);
+    }
+  }
+  if (texts.length !== 1) throw new AnalysisError("invalid_response", `output_text_count:${texts.length}`);
+  return texts[0] ?? null;
+}
+
+export function createOpenAI(config: {
+  apiKey: string;
+  model: string;
+  timeoutMs?: number;
+  url?: string;
+  transport?: AiTransport;
+}, fetcher: typeof fetch = fetch) {
+  const url = config.url ?? "https://api.openai.com/v1/responses";
+  const transport = config.transport ?? "responses";
   return async (input: AnalysisInput): Promise<ModelInterpretation> => {
-    if (!config.apiKey) throw new AnalysisError("not_configured");
+    if (!config.apiKey || !config.model) throw new AnalysisError("not_configured");
+    const userPayload = JSON.stringify({ ...input, eventRisk: { ...input.eventRisk, events: undefined, reasons: input.eventRisk.reasons.slice(0, 20) } });
+    const body = transport === "chat"
+      ? {
+        model: config.model,
+        messages: [{ role: "system", content: systemPrompt }, { role: "user", content: userPayload }],
+        response_format: { type: "json_schema", json_schema: { name: "fx_interpretation", strict: true, schema: interpretationSchema } },
+      }
+      : {
+        model: config.model, store: false, max_output_tokens: 3500,
+        input: [{ role: "system", content: systemPrompt }, { role: "user", content: userPayload }],
+        text: { format: { type: "json_schema", name: "fx_interpretation", strict: true, schema: interpretationSchema } },
+      };
     let response: Response;
     try {
-      response = await fetcher("https://api.openai.com/v1/responses", {
+      response = await fetcher(url, {
         method: "POST", headers: { Authorization: `Bearer ${config.apiKey}`, "Content-Type": "application/json" },
         cache: "no-store", redirect: "error", signal: AbortSignal.timeout(config.timeoutMs ?? 25_000),
-        body: JSON.stringify({ model: config.model, store: false, max_output_tokens: 3500,
-          input: [{ role: "system", content: systemPrompt }, { role: "user", content: JSON.stringify({ ...input, eventRisk: { ...input.eventRisk, events: undefined, reasons: input.eventRisk.reasons.slice(0, 20) } }) }],
-          text: { format: { type: "json_schema", name: "fx_interpretation", strict: true, schema: interpretationSchema } },
-        }),
+        body: JSON.stringify(body),
       });
     } catch (error) { throw new AnalysisError(error instanceof Error && ["TimeoutError", "AbortError"].includes(error.name) ? "timeout" : "api_error"); }
-    if (!response.ok) throw new AnalysisError(response.status === 429 ? "rate_limited" : "api_error");
+    if (!response.ok) {
+      const classified = classifyProviderHttp(response.status);
+      const retryAfter = retryAfterSeconds(response.headers.get("retry-after"));
+      const detail = retryAfter == null ? classified.detail : `${classified.detail}:retry_after_${retryAfter}`;
+      throw new AnalysisError(classified.code === "timeout" ? "timeout" : classified.code, detail);
+    }
     try {
-      const body: unknown = await response.json();
-      if (!isRecord(body) || body.status !== "completed" || !Array.isArray(body.output)) {
-        throw new AnalysisError("invalid_response", `upstream_status:${isRecord(body) ? String(body.status) : "non_object"}`);
-      }
-      const texts: string[] = [];
-      for (const item of body.output) {
-        if (!isRecord(item) || item.type !== "message" || !Array.isArray(item.content)) continue;
-        for (const part of item.content) {
-          if (isRecord(part) && part.type === "refusal") throw new AnalysisError("invalid_response", "model_refusal");
-          if (isRecord(part) && part.type === "output_text" && typeof part.text === "string") texts.push(part.text);
-        }
-      }
-      if (texts.length !== 1) throw new AnalysisError("invalid_response", `output_text_count:${texts.length}`);
-      if (texts[0]!.length > 25_000) throw new AnalysisError("invalid_response", "output_text_too_large");
+      const payload: unknown = await response.json();
+      const text = extractModelText(payload);
+      if (!text) throw new AnalysisError("invalid_response", "output_text_count:0");
+      if (text.length > 25_000) throw new AnalysisError("invalid_response", "output_text_too_large");
       let parsed: unknown;
-      try { parsed = JSON.parse(texts[0]!); }
+      try { parsed = JSON.parse(stripFence(text)); }
       catch { throw new AnalysisError("invalid_response", "json_parse_failed"); }
       return validateInterpretation(parsed, input);
     } catch (error) {

@@ -2,21 +2,33 @@ import { nextHigh, riskState } from "../economic-calendar/risk-window";
 import { categoryLabels } from "./input";
 import { directionValue, scoreDirection } from "./technical";
 import { generateScenario } from "./scenario";
+import type { AiProviderName } from "./provider";
 import { factorCategories, type AIAnalysis, type AIErrorCode, type AnalysisInput, type ModelInterpretation, type TradeSignal } from "./types";
 import { sanitizeStructuredEntryTrigger } from "./entry-trigger";
 
 export const aiMessages: Record<AIErrorCode, string> = {
-  not_configured: "OPENAI_API_KEYが未設定です。テクニカル評価のみ表示しています。",
+  not_configured: "OpenAI API設定が不足しています。テクニカル評価のみ表示しています。",
   api_error: "AIを取得できません。テクニカル評価のみ表示しています。",
   invalid_response: "AIの返答を検証できませんでした。テクニカル評価のみ表示しています。",
   timeout: "AI分析がタイムアウトしました。テクニカル評価のみ表示しています。",
   rate_limited: "AIの利用上限に達しました。テクニカル評価のみ表示しています。",
   insufficient_data: "市場データ不足のためAI分析を見送りました。",
 };
+
+/** Provider-aware user message. Never include secret values or env variable names. */
+export function aiMessage(code: AIErrorCode, provider: AiProviderName = "openai"): string {
+  if (code === "not_configured") {
+    return provider === "openrouter"
+      ? "OpenRouter API設定が不足しています。テクニカル評価のみ表示しています。"
+      : "OpenAI API設定が不足しています。テクニカル評価のみ表示しています。";
+  }
+  return aiMessages[code];
+}
+
 export function signalFromScore(score: number): TradeSignal {
   return score >= 60 ? "strong_buy" : score >= 20 ? "buy" : score <= -60 ? "strong_sell" : score <= -20 ? "sell" : "wait";
 }
-export function finalizeAnalysis(input: AnalysisInput, interpretation: ModelInterpretation | null, model: string, error: AIErrorCode | null, now = Date.now()): AIAnalysis {
+export function finalizeAnalysis(input: AnalysisInput, interpretation: ModelInterpretation | null, model: string, error: AIErrorCode | null, now = Date.now(), provider: AiProviderName = "openai"): AIAnalysis {
   const technical = input.technicalAnalysis;
   const calendarRisk = input.eventRisk.events ? riskState(input.eventRisk.events, now) : input.eventRisk;
   const economicBlocked = calendarRisk.imminent || calendarRisk.uncertainTime || input.eventRisk.imminent || input.eventRisk.uncertainTime;
@@ -33,7 +45,7 @@ export function finalizeAnalysis(input: AnalysisInput, interpretation: ModelInte
   const overextendedRsi = technical.frames.some(frame => ["oversold", "overbought"].includes(frame.rsiState));
   const confidence = aiReady ? Math.max(0, Math.round(Math.min(interpretation.confidence, input.dataAvailability.score, 90) - (contradictory ? 20 : 0) - (overextendedRsi ? 8 : 0) - (economicBlocked ? 15 : 0))) : Math.min(35, input.dataAvailability.score);
   const decisionReasons: string[] = [];
-  if (!aiReady) decisionReasons.push(aiMessages[error ?? "api_error"]);
+  if (!aiReady) decisionReasons.push(aiMessage(error ?? "api_error", provider));
   if (!technical.ready) decisionReasons.push("新鮮なレートと十分な2時間軸以上の確定足が必要です。");
   if (input.dataAvailability.score < 60) decisionReasons.push("データ充足率が60%未満のため待機します。");
   if (confidence < 55) decisionReasons.push("確信度が55%未満のため待機します。");
@@ -60,7 +72,7 @@ export function finalizeAnalysis(input: AnalysisInput, interpretation: ModelInte
     factors, bullishReasons: aiReady ? interpretation.bullishReasons : technicalBullish, bearishReasons: aiReady ? interpretation.bearishReasons : technicalBearish,
     riskWarnings: [...new Set([...technical.warnings, ...input.dataAvailability.missingData, ...input.eventRisk.reasons, ...(interpretation?.riskWarnings ?? []), ...(interpretation?.scenarioComment ? [interpretation.scenarioComment] : []), "確信度とスコアは勝率ではありません。条件が整うまでは待機できます。" ])],
     scenario, dataQuality: input.dataAvailability, currentRate: input.currentRate, analyzedAt: new Date(now).toISOString(), expiresAt: new Date(expiresAt).toISOString(), decisionReasons,
-    ai: { status: aiReady ? "available" : error === "not_configured" || error === "insufficient_data" ? "unavailable" : "error", model: aiReady ? model : null, code: error, message: error ? aiMessages[error] : null },
+    ai: { status: aiReady ? "available" : error === "not_configured" || error === "insufficient_data" ? "unavailable" : "error", model: aiReady ? model : null, code: error, message: error ? aiMessage(error, provider) : null },
     chartEvidence: input.chartImageAnalysis ? {
       used: true,
       timeframe: input.chartImageAnalysis.detected.timeframe,

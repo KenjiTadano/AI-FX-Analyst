@@ -64,20 +64,27 @@ export interface ChartImageAnalysis {
 
 export type ChartAnalysisResponse =
   | { ok: true; analysis: ChartImageAnalysis; error: null }
-  | { ok: false; analysis: null; error: { code: ChartAnalysisErrorCode; message: string } };
+  | { ok: false; analysis: null; error: { code: ChartAnalysisErrorCode; message: string; detail?: string | null } };
 
 export const chartAnalysisMessages: Record<ChartAnalysisErrorCode, string> = {
   invalid_file: "画像ファイルが無効です。別の画像を選択してください。",
   unsupported_file: "対応形式は PNG / JPEG / WebP のみです。",
   file_too_large: "画像サイズは5MB以下にしてください。",
   invalid_pair: "対応していない通貨ペアです。",
-  not_configured: "OPENAI_API_KEYが未設定です。設定後にサーバーを再起動してください。",
+  not_configured: "OpenAI API設定が不足しています。設定後にサーバーを再起動してください。",
   openai_unavailable: "チャート解析AIを取得できません。時間をおいて再試行してください。",
   openai_timeout: "チャート解析がタイムアウトしました。時間をおいて再試行してください。",
   invalid_ai_response: "チャート解析の結果を検証できませんでした。",
   analysis_failed: "チャート解析に失敗しました。",
   rate_limited: "チャート解析の利用上限に達しました。時間をおいて再試行してください。",
 };
+
+/** Provider-aware chart config message. Never include secret values or env variable names. */
+export function chartNotConfiguredMessage(provider: "openai" | "openrouter" = "openai"): string {
+  return provider === "openrouter"
+    ? "OpenRouter API設定が不足しています。設定後にサーバーを再起動してください。"
+    : chartAnalysisMessages.not_configured;
+}
 
 export const MAX_CHART_IMAGE_BYTES = 5 * 1024 * 1024;
 export const ALLOWED_CHART_MIME = ["image/png", "image/jpeg", "image/webp"] as const;

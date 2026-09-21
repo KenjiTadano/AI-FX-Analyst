@@ -176,7 +176,7 @@ export function AIOverview({
       </div>
 
       {stale && !expired && <p className="neutral" role="status">分析結果が古くなっています（{Math.round(ANALYSIS_STALE_MS / 60_000)}分以上）。再分析を推奨します。</p>}
-      {fallbackOnly && <p className="neutral" role="status">AI分析：一部利用不可。技術分析ベースの暫定判断です。</p>}
+      {fallbackOnly && <p className="neutral" role="status" data-testid="ai-fallback-note">AI分析：一部利用不可。技術分析ベースの暫定判断です。Action の WAIT は AI 未取得時の暫定扱いであり、AI が WAIT と判断した結果ではありません。</p>}
       {!data && response?.error && <div className="chart-actions"><p className="material-empty negative" role="alert">分析に失敗しました。</p><button type="button" className="journal-primary" disabled={refreshing} onClick={onRefresh}>再分析</button></div>}
 
       <div className="decision-hero">
@@ -218,7 +218,11 @@ export function AIOverview({
       {(action === "WAIT" || signal === "wait") && <section className="decision-wait-reasons" aria-label="WAIT理由">
         <h3>WAIT理由</h3>
         <ul className="ai-reason-list">{waitReasons.map(item => <li key={`${item.kind}-${item.label}`}>{item.label}</li>)}</ul>
-        <p className="footnote">WAITは分析失敗ではありません。条件が整うまでの正常な判断です。</p>
+        <p className="footnote" data-testid="ai-wait-footnote">
+          {fallbackOnly
+            ? "Action の WAIT と AI status（unavailable / error）は別状態です。AI が WAIT と判断したわけではありません。"
+            : "WAITは分析失敗ではありません。条件が整うまでの正常な判断です。"}
+        </p>
       </section>}
 
       <section className="decision-position" aria-label="推奨ポジション">
@@ -243,7 +247,7 @@ export function AIOverview({
       {data?.dataQuality.categories.economic.status === "missing" && <p className="footnote">利用不可: Economic Calendar</p>}
 
       {message && <p className="footnote neutral" role="status">{message}</p>}
-      {data && <><span className="badge">{data.ai.status === "available" ? "AI統合済み" : "テクニカルのみ"}{response?.cached ? " · キャッシュ" : ""}</span><p className="footnote" data-testid="ai-analyzed-at">分析時刻: {time(data.analyzedAt)} JST<br />有効期限: {time(data.expiresAt)} JST</p></>}
+      {data && <><span className="badge" data-testid="ai-status">{data.ai.status === "available" ? "AI統合済み" : data.ai.status === "unavailable" ? "AI status: unavailable" : "AI status: error"}{response?.cached ? " · キャッシュ" : ""}</span><p className="footnote" data-testid="ai-analyzed-at">分析時刻: {time(data.analyzedAt)} JST<br />有効期限: {time(data.expiresAt)} JST</p></>}
       <p className="footnote">方向の強さと確信度は別の指標です。いずれも勝率ではありません。注文は実行しません。</p>
     </Panel>
 

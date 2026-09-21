@@ -1,14 +1,21 @@
 import "server-only";
+import { resolveChartProvider } from "../ai/provider";
 import { createChartAnalysisService } from "./service";
 import { createChartVision } from "./openai-vision";
 
-const apiKey = process.env.OPENAI_API_KEY?.trim() ?? "";
-const model = process.env.OPENAI_CHART_MODEL?.trim() || process.env.OPENAI_ANALYSIS_MODEL?.trim() || "gpt-4.1-mini";
+const provider = resolveChartProvider();
 
 export const analyzeChartImage = createChartAnalysisService({
-  apiKey,
-  model,
-  analyze: createChartVision({ apiKey, model }),
+  apiKey: provider.apiKey,
+  model: provider.model,
+  provider: provider.provider,
+  analyze: createChartVision({
+    apiKey: provider.apiKey,
+    model: provider.model,
+    url: provider.url,
+    transport: provider.transport,
+    imageCapable: provider.imageCapable,
+  }),
 });
 
-export const chartAnalysisModel = model;
+export const chartAnalysisModel = provider.model;

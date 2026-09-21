@@ -12,7 +12,7 @@ export function useMarket(symbol: string) {
     async function refresh() {
       if (document.visibilityState === "hidden") { timer = setTimeout(refresh, 60000); return; }
       try {
-        const response = await fetch(`/api/market?symbol=${encodeURIComponent(symbol)}`, { signal: controller.signal });
+        const response = await fetch(`/api/market?symbol=${encodeURIComponent(symbol)}`, { signal: AbortSignal.any([controller.signal, AbortSignal.timeout(20_000)]) });
         if (!response.ok) throw new Error("取得に失敗しました。");
         const data: MarketData = await response.json();
         if (!controller.signal.aborted) setResult({ symbol, data, error: null });

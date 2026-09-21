@@ -5,6 +5,7 @@ import { canAttachToPairAnalysis } from "../chart-analysis/normalize";
 import { buildInput } from "./input";
 import { finalizeAnalysis } from "./engine";
 import { AnalysisError, validateInterpretation } from "./openai";
+import type { AiProviderName } from "./provider";
 import type { AIAnalysis, AnalysisInput, AnalysisResponse, ModelInterpretation } from "./types";
 
 export interface AnalysisDependencies {
@@ -13,6 +14,7 @@ export interface AnalysisDependencies {
   interpret(input: AnalysisInput): Promise<ModelInterpretation>;
   model: string;
   enabled: boolean;
+  provider?: AiProviderName;
   now?: () => number;
   hourlyLimit?: number;
   dailyLimit?: number;
@@ -52,7 +54,7 @@ export function createAnalysisService(deps: AnalysisDependencies) {
         calls.push(time);
         interpretation = validateInterpretation(await deps.interpret(input), input);
       } catch (caught) { error = caught instanceof AnalysisError ? caught.code : "api_error"; }
-      const data = finalizeAnalysis(input, interpretation, deps.model, error, now());
+      const data = finalizeAnalysis(input, interpretation, deps.model, error, now(), deps.provider ?? "openai");
       cache.set(key, { data, revision });
       return { success: true, data, error: null, cached: false };
     })();

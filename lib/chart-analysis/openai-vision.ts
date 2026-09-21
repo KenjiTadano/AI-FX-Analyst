@@ -1,9 +1,12 @@
 import type { Symbol } from "../market/types";
+import { classifyProviderHttp, retryAfterSeconds } from "../ai/provider";
 import { normalizeChartAnalysis } from "./normalize";
 import type { AllowedChartMime, ChartAnalysisErrorCode, ChartImageAnalysis } from "./types";
 
 export class ChartVisionError extends Error {
-  constructor(public code: ChartAnalysisErrorCode) { super(code); }
+  constructor(public code: ChartAnalysisErrorCode, public detail?: string | null) {
+    super(detail ? `${code}: ${detail}` : code);
+  }
 }
 
 export const chartVisionPrompt = `あなたはFXチャート画像の観察アシスタントです。売買指示は出さず、画像に見える範囲だけを構造化JSONで報告します。
@@ -102,51 +105,94 @@ export const chartAnalysisSchema = {
 
 const isRecord = (value: unknown): value is Record<string, unknown> => !!value && typeof value === "object" && !Array.isArray(value);
 
-export function createChartVision(config: { apiKey: string; model: string; timeoutMs?: number }, fetcher: typeof fetch = fetch) {
+export function createChartVision(config: {
+  apiKey: string;
+  model: string;
+  timeoutMs?: number;
+  url?: string;
+  transport?: "responses" | "chat";
+  imageCapable?: boolean;
+}, fetcher: typeof fetch = fetch) {
+  const url = config.url ?? "https://api.openai.com/v1/responses";
+  const transport = config.transport ?? "responses";
   return async (input: { pair: Symbol; mime: AllowedChartMime; base64: string }): Promise<ChartImageAnalysis> => {
-    if (!config.apiKey) throw new ChartVisionError("not_configured");
+    if (!config.apiKey || !config.model) throw new ChartVisionError("not_configured");
+    if (config.imageCapable === false) throw new ChartVisionError("openai_unavailable");
+    const prompt = `${chartVisionPrompt}\nユーザー選択通貨ペア: ${input.pair}\n画像に見える範囲だけをJSONで返してください。`;
+    const body = transport === "chat"
+      ? {
+        model: config.model,
+        messages: [{
+          role: "user",
+          content: [
+            { type: "text", text: prompt },
+            { type: "image_url", image_url: { url: `data:${input.mime};base64,${input.base64}` } },
+          ],
+        }],
+        response_format: { type: "json_schema", json_schema: { name: "chart_image_analysis", strict: true, schema: chartAnalysisSchema } },
+      }
+      : {
+        model: config.model,
+        store: false,
+        max_output_tokens: 2500,
+        input: [{
+          role: "user",
+          content: [
+            { type: "input_text", text: prompt },
+            { type: "input_image", image_url: `data:${input.mime};base64,${input.base64}` },
+          ],
+        }],
+        text: { format: { type: "json_schema", name: "chart_image_analysis", strict: true, schema: chartAnalysisSchema } },
+      };
     let response: Response;
     try {
-      response = await fetcher("https://api.openai.com/v1/responses", {
+      response = await fetcher(url, {
         method: "POST",
         headers: { Authorization: `Bearer ${config.apiKey}`, "Content-Type": "application/json" },
         cache: "no-store",
         redirect: "error",
         signal: AbortSignal.timeout(config.timeoutMs ?? 45_000),
-        body: JSON.stringify({
-          model: config.model,
-          store: false,
-          max_output_tokens: 2500,
-          input: [{
-            role: "user",
-            content: [
-              { type: "input_text", text: `${chartVisionPrompt}\nユーザー選択通貨ペア: ${input.pair}\n画像に見える範囲だけをJSONで返してください。` },
-              { type: "input_image", image_url: `data:${input.mime};base64,${input.base64}` },
-            ],
-          }],
-          text: { format: { type: "json_schema", name: "chart_image_analysis", strict: true, schema: chartAnalysisSchema } },
-        }),
+        body: JSON.stringify(body),
       });
     } catch (error) {
       throw new ChartVisionError(error instanceof Error && ["TimeoutError", "AbortError"].includes(error.name) ? "openai_timeout" : "openai_unavailable");
     }
-    if (!response.ok) throw new ChartVisionError(response.status === 429 ? "rate_limited" : "openai_unavailable");
+    if (!response.ok) {
+      const classified = classifyProviderHttp(response.status);
+      const retryAfter = retryAfterSeconds(response.headers.get("retry-after"));
+      const detail = retryAfter == null ? classified.detail : `${classified.detail}:retry_after_${retryAfter}`;
+      throw new ChartVisionError(
+        classified.code === "rate_limited" ? "rate_limited" : classified.code === "timeout" ? "openai_timeout" : "openai_unavailable",
+        detail,
+      );
+    }
     try {
-      const body: unknown = await response.json();
-      if (!isRecord(body) || body.status !== "completed" || !Array.isArray(body.output)) throw new ChartVisionError("invalid_ai_response");
-      const texts: string[] = [];
-      for (const item of body.output) {
-        if (!isRecord(item) || item.type !== "message" || !Array.isArray(item.content)) continue;
-        for (const part of item.content) {
-          if (isRecord(part) && part.type === "refusal") throw new ChartVisionError("invalid_ai_response");
-          if (isRecord(part) && part.type === "output_text" && typeof part.text === "string") texts.push(part.text);
-        }
-      }
-      if (texts.length !== 1 || texts[0]!.length > 25_000) throw new ChartVisionError("invalid_ai_response");
-      return normalizeChartAnalysis(JSON.parse(texts[0]!), input.pair, config.model);
+      const payload: unknown = await response.json();
+      const text = chartModelText(payload);
+      if (!text || text.length > 25_000) throw new ChartVisionError("invalid_ai_response");
+      return normalizeChartAnalysis(JSON.parse(text), input.pair, config.model);
     } catch (error) {
       if (error instanceof ChartVisionError) throw error;
       throw new ChartVisionError("invalid_ai_response");
     }
   };
+}
+
+function chartModelText(body: unknown): string | null {
+  if (!isRecord(body)) return null;
+  if (Array.isArray(body.choices)) {
+    const choice = body.choices[0];
+    if (!isRecord(choice) || !isRecord(choice.message) || typeof choice.message.content !== "string") return null;
+    return choice.message.content;
+  }
+  if (body.status !== "completed" || !Array.isArray(body.output)) return null;
+  const texts: string[] = [];
+  for (const item of body.output) {
+    if (!isRecord(item) || item.type !== "message" || !Array.isArray(item.content)) continue;
+    for (const part of item.content) {
+      if (isRecord(part) && part.type === "refusal") return null;
+      if (isRecord(part) && part.type === "output_text" && typeof part.text === "string") texts.push(part.text);
+    }
+  }
+  return texts.length === 1 ? texts[0]! : null;
 }

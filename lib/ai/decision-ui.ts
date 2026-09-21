@@ -42,7 +42,7 @@ export function classifyWaitReasons(analysis: AIAnalysis | null | undefined): { 
   }
   for (const reason of analysis.decisionReasons) {
     if (/指標|イベント|リスク時間|発表/.test(reason)) push("event", reason.includes("指標") || reason.includes("イベント") ? "重要指標前" : reason.slice(0, 40));
-    else if (/充足|未取得|不足|テクニカル評価のみ|OPENAI|データ/.test(reason)) push("data", "データ不足");
+    else if (/充足|未取得|不足|テクニカル評価のみ|API設定|OpenAI|OpenRouter|データ/.test(reason)) push("data", "データ不足");
     else if (/確信度/.test(reason)) push("confidence", "確信度不足");
     else if (/矛盾|拮抗/.test(reason)) push("conflict", "BUY/SELL材料が拮抗");
     else if (/急変|乖離|追いかけ|ボラ/.test(reason)) push("volatility", "ボラティリティ / 急変注意");

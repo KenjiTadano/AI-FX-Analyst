@@ -34,6 +34,7 @@ export type DashboardScenario = {
   mtfByPair?: Partial<Record<Symbol, MtfFixtureName>>;
   regime?: RegimeFixtureName;
   regimeByPair?: Partial<Record<Symbol, RegimeFixtureName>>;
+  marketUnavailable?: boolean;
 };
 
 function cors(request: Request): Record<string, string> {
@@ -150,6 +151,10 @@ export async function installDashboardMocks(page: Page, scenario: DashboardScena
   });
 
   await context.route(/\/api\/market(?:\?|$)/, async route => {
+    if (live.marketUnavailable) {
+      await route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: "市場データを取得できませんでした。" }) });
+      return;
+    }
     const symbol = (new URL(route.request().url()).searchParams.get("symbol") ?? "USD/JPY") as Symbol;
     await route.fulfill({
       status: 200,
