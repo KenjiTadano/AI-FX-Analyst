@@ -651,6 +651,147 @@ function t030Id(n: number): string {
   return `11111111-1111-4111-8111-111111111${String(800 + n).padStart(3, "0")}`;
 }
 
+function t032Id(n: number): string {
+  return `11111111-1111-4111-8111-111111111${String(900 + n).padStart(3, "0")}`;
+}
+
+function e2eRegime(kind: "trending" | "range" | "transition" | "unavailable", volatility: "high" | "normal" | "low" | "unavailable" = "normal") {
+  return {
+    version: 1 as const,
+    pair: "USD/JPY" as const,
+    timeframe: "1h" as const,
+    analyzedAt: "2026-09-15T03:15:00.000Z",
+    regime: kind,
+    trendDirection: kind === "trending" ? "bullish" as const : "neutral" as const,
+    volatility,
+    evidence: {
+      close: 156.5, sma20: 156.3, sma75: 156.0, sma200: 155.5, rsi14: 55,
+      atr14: 0.2, atrPercent: 0.13, atrRatio: 1, atrBaseline: 0.2,
+      smaSpreadPercent: 0.2, rangePosition: 0.5, recentHigh: 157, recentLow: 155, dataPoints: 240,
+    },
+    reasons: ["e2e"],
+  };
+}
+
+/** Task032: Performance Intelligence coverage of R / Regime / MTF / PreTrade / legacy. */
+export function performanceIntelligenceTrades(now = Date.now()): Trade[] {
+  const recent = daysAgo(5, now);
+  const month = daysAgo(45, now);
+  const old = daysAgo(120, now);
+  const bullish = e2eMtf({ alignment: "aligned_bullish", bias: "bullish" });
+  const mixed = e2eMtf({ alignment: "mixed", bias: "bullish" });
+  const context = preTradeSnapshotContext({ action: "WAIT", direction: "BUY" }, recent);
+
+  const withRegimeR = [1, 2, 3, 4, 5, 6].map(n => withExitPlan(closedTrade({
+    id: t032Id(n),
+    openedAt: recent,
+    closedAt: recent,
+    side: "long",
+    entryPrice: 155.2,
+    exitPrice: n <= 3 ? 155.8 : 154.9,
+    notes: "t032-regime-r",
+    snapshot: richSnapshot({
+      analyzedAt: recent,
+      capturedAt: recent,
+      expiresAt: recent,
+      action: n % 2 === 0 ? "BUY" : "WAIT",
+      directionSignal: "buy",
+      multiTimeframeAnalysis: n <= 3 ? bullish : mixed,
+      marketRegimeAnalysis: e2eRegime(n <= 3 ? "trending" : "range", n <= 2 ? "high" : "normal"),
+      preTradeContext: context,
+    }),
+  }), 154.9, 155.8));
+
+  const legacyMissing = [7, 8].map(n => closedTrade({
+    id: t032Id(n),
+    openedAt: recent,
+    closedAt: recent,
+    side: "long",
+    entryPrice: 155.2,
+    exitPrice: 155.5,
+    notes: "t032-legacy-missing",
+    snapshot: null,
+  }));
+
+  const regimeUnavailable = withExitPlan(closedTrade({
+    id: t032Id(9),
+    openedAt: recent,
+    closedAt: recent,
+    side: "long",
+    entryPrice: 155.2,
+    exitPrice: 155.5,
+    notes: "t032-regime-unavailable",
+    snapshot: richSnapshot({
+      analyzedAt: recent,
+      capturedAt: recent,
+      expiresAt: recent,
+      marketRegimeAnalysis: e2eRegime("unavailable", "unavailable"),
+      multiTimeframeAnalysis: bullish,
+      preTradeContext: context,
+    }),
+  }), 154.9, 155.8);
+
+  const monthTrade = withExitPlan(closedTrade({
+    id: t032Id(10),
+    openedAt: month,
+    closedAt: month,
+    side: "long",
+    entryPrice: 155.2,
+    exitPrice: 155.8,
+    notes: "t032-month",
+    snapshot: richSnapshot({
+      analyzedAt: month,
+      capturedAt: month,
+      expiresAt: month,
+      marketRegimeAnalysis: e2eRegime("transition", "low"),
+      multiTimeframeAnalysis: mixed,
+      preTradeContext: preTradeSnapshotContext({ action: "SELL" }, month),
+    }),
+  }), 154.9, 155.8);
+
+  const oldTrade = withExitPlan(closedTrade({
+    id: t032Id(11),
+    openedAt: old,
+    closedAt: old,
+    side: "long",
+    entryPrice: 155.2,
+    exitPrice: 155.5,
+    notes: "t032-old",
+    snapshot: richSnapshot({
+      analyzedAt: old,
+      capturedAt: old,
+      expiresAt: old,
+      marketRegimeAnalysis: e2eRegime("trending", "normal"),
+      multiTimeframeAnalysis: bullish,
+    }),
+  }), 154.9, 155.8);
+
+  const openTrade = {
+    ...closedTrade({
+      id: t032Id(12),
+      openedAt: recent,
+      closedAt: recent,
+      side: "long",
+      entryPrice: 155.2,
+      exitPrice: 155.5,
+      notes: "t032-open",
+      snapshot: richSnapshot({
+        analyzedAt: recent,
+        capturedAt: recent,
+        expiresAt: recent,
+        marketRegimeAnalysis: e2eRegime("trending"),
+        multiTimeframeAnalysis: bullish,
+      }),
+    }),
+    status: "open" as const,
+    exitPrice: null,
+    closedAt: null,
+    realizedPnl: null,
+  };
+
+  return [...withRegimeR, ...legacyMissing, regimeUnavailable, monthTrade, oldTrade, openTrade];
+}
+
 /** Task030: AI + PreTrade + MTF without Regime, plus malformed Regime isolation. */
 export function entryContextFixtureTrades(now = Date.now()): Trade[] {
   const at = daysAgo(5, now);

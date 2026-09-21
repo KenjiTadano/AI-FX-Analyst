@@ -456,6 +456,11 @@ h2 { font-size: 17px; font-weight: 600; margin-top: 4px; }
 .pretrade-grid div { display: grid; grid-template-columns: 7.5rem minmax(0, 1fr); gap: 8px; min-width: 0; }
 .pretrade-grid dt { color: var(--muted); }
 .pretrade-grid dd { margin: 0; overflow-wrap: anywhere; }
+.performance-intelligence-panel, .pi-section, .pi-cards, .pi-overview-stats, .pi-coverage-stats, .pi-observations-list { min-width: 0; }
+.pi-section { margin-top: 16px; }
+.pi-section > h3 { font-size: 14px; margin: 0 0 8px; overflow-wrap: anywhere; }
+.pi-observations-list { margin: 8px 0 0; padding-left: 1.2em; font-size: 13px; line-height: 1.7; color: var(--muted); overflow-wrap: anywhere; }
+.pi-cards small { display: block; margin-top: 6px; }
 .pretrade-perf-panel, .mtf-perf-panel, .pretrade-perf-section, .mtf-perf-section, .pretrade-perf-coverage, .mtf-perf-coverage { min-width: 0; }
 .pretrade-perf-section, .mtf-perf-section { margin-top: 16px; }
 .pretrade-perf-section h3, .mtf-perf-section h3 { font-size: 14px; margin: 0 0 8px; overflow-wrap: anywhere; }

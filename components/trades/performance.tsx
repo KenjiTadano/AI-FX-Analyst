@@ -10,6 +10,7 @@ import { Panel } from "../dashboard/panels";
 import { AiEntryContextPanel } from "./ai-entry-context";
 import { EntryTimingPanel } from "./entry-timing";
 import { TradingReviewInsights } from "./insights";
+import { PerformanceIntelligencePanel } from "./performance-intelligence";
 import { PreTradeContextPerformancePanel } from "./pre-trade-performance";
 import { MtfPerformancePanel } from "./mtf-performance";
 import { TradeList } from "./trade-list";
@@ -78,6 +79,8 @@ export function Performance({ trades, initialBalance }: { trades: Trade[]; initi
         </p>
       )}
     </Panel>
+
+    <PerformanceIntelligencePanel trades={filteredTrades} periodLabel={label} />
 
     {periodEmpty ? (
       <p className="material-empty journal-wide" role="status">この期間には取引記録がありません。</p>
