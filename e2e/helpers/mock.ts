@@ -203,6 +203,40 @@ export async function installDashboardMocks(page: Page, scenario: DashboardScena
       return;
     }
     const url = request.url();
+    if (/\/rest\/v1\/rpc\/append_market_context_revision/.test(url)) {
+      const body = (request.postDataJSON() as {
+        p_trade_id?: string;
+        p_expected_version?: number;
+        p_revision?: Record<string, unknown>;
+      } | null) ?? {};
+      const id = body.p_trade_id ?? "";
+      const index = rows.findIndex(row => row.id === id);
+      if (index < 0) {
+        await route.fulfill({ status: 404, headers: cors(request), body: JSON.stringify({ message: "not found" }) });
+        return;
+      }
+      const previous = rows[index] as Record<string, unknown>;
+      if (Number(previous.version) !== Number(body.p_expected_version)) {
+        await route.fulfill({ status: 409, headers: cors(request), body: JSON.stringify({ message: "conflict" }) });
+        return;
+      }
+      const current = Array.isArray(previous.market_context_revisions)
+        ? previous.market_context_revisions as unknown[]
+        : [];
+      if (current.length >= 20) {
+        await route.fulfill({ status: 400, headers: cors(request), body: JSON.stringify({ message: "limit" }) });
+        return;
+      }
+      const next = {
+        ...previous,
+        market_context_snapshot: previous.market_context_snapshot,
+        market_context_revisions: [...current, body.p_revision],
+        version: (Number(previous.version) || 1) + 1,
+      };
+      rows[index] = next as typeof rows[number];
+      await route.fulfill({ status: 200, headers: cors(request), body: JSON.stringify(next) });
+      return;
+    }
     if (/\/rest\/v1\/user_settings/.test(url)) {
       await route.fulfill({ status: 200, headers: cors(request), body: JSON.stringify(settingsRow(now)) });
       return;
@@ -235,6 +269,8 @@ export async function installDashboardMocks(page: Page, scenario: DashboardScena
           ...body,
           analysis_snapshot: previous.analysis_snapshot,
           exit_plan: previous.exit_plan,
+          market_context_snapshot: previous.market_context_snapshot,
+          market_context_revisions: previous.market_context_revisions,
           version: (previous.version ?? 1) + 1,
         };
         rows[index] = next;

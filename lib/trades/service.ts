@@ -6,7 +6,7 @@ import type { EntryReadiness } from "../trading-plan/entry-readiness";
 import { buildEntryTriggerWatch } from "../trading-plan/entry-trigger-watch";
 import { pnl } from "./calculations";
 import { createExitPlan } from "./exit-plan";
-import { captureMarketContextSnapshot } from "./market-context-snapshot";
+import { captureMarketContextSnapshot, buildTradeWithAppendedRevision, type CaptureMarketContextInput } from "./market-context-snapshot";
 import { captureTradeAiSnapshot } from "./snapshot";
 import { validateDraft, validateTrade } from "./validation";
 import type { Result, Trade, TradeAnalysisSnapshot, TradeDraft } from "./types";
@@ -85,6 +85,7 @@ export function editTrade(trade: Trade, draft: TradeDraft, now: string): Result<
     updatedAt: now,
     analysisSnapshot: trade.analysisSnapshot,
     marketContextSnapshot: trade.marketContextSnapshot ?? null,
+    marketContextRevisions: trade.marketContextRevisions ?? null,
     exitPlan: trade.exitPlan ?? null,
     realizedPnl: draft.status === "closed" ? pnl(draft.side, draft.entryPrice, draft.exitPrice!, draft.quantity) : null,
   });
@@ -93,4 +94,18 @@ export function editTrade(trade: Trade, draft: TradeDraft, now: string): Result<
 export function closeTrade(trade: Trade, exitPrice: number, closedAt: string, now: string): Result<Trade> {
   if (trade.status !== "open") return { data: null, error: "この取引はすでに決済済みです。" };
   return editTrade(trade, { ...trade, status: "closed", exitPrice, closedAt }, now);
+}
+
+/**
+ * Task105: append a manual market-context revision. Original snapshot is never changed.
+ * Does not call AI. Pair must match trade.pair.
+ */
+export function appendMarketContextRevision(
+  trade: Trade,
+  input: CaptureMarketContextInput,
+  now: string,
+): Result<Trade> {
+  const built = buildTradeWithAppendedRevision(trade, input, now);
+  if (!built.trade) return { data: null, error: built.error };
+  return validateTrade(built.trade);
 }

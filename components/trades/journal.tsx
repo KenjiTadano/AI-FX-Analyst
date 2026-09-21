@@ -5,7 +5,11 @@ import type { ChartImageAnalysis } from "@/lib/chart-analysis/types";
 import type { Quote, Trade, TradeDraft } from "@/lib/trades/types";
 import type { MarketData } from "@/lib/market/types";
 import { tradeRepository } from "@/lib/trades/repository";
-import { createTrade, editTrade } from "@/lib/trades/service";
+import { appendMarketContextRevision, createTrade, editTrade } from "@/lib/trades/service";
+import {
+  MARKET_CONTEXT_CAPTURE_ERROR,
+  MARKET_CONTEXT_PAIR_MISMATCH_ERROR,
+} from "@/lib/trades/market-context-snapshot";
 import { getBrowserSupabase } from "@/lib/supabase/client";
 import { createCloudRepository, type CloudJournal } from "@/lib/supabase/cloud-repository";
 import { TradeForm } from "./trade-form";
@@ -68,6 +72,49 @@ export function TradeJournal({ userId, view, pair, quote, analysis, chartImageAn
     if (!result.data) { setError(result.error); return; }
     setJournal({ ...journal, trades: journal.trades.filter(t => t.id !== deleting.id) }); setDeleting(null); setError(null); setMessage("クラウドの取引を削除しました。");
   }
+  async function refreshMarketContext(trade: Trade): Promise<string | null> {
+    if (!repository || !journal || busy) return "読み込み完了後に再取得してください。";
+    const at = new Date().toISOString();
+    let fresh: MarketData | null = null;
+    try {
+      // User-explicit one-shot only. Does not add background polling.
+      const response = await fetch(`/api/market?symbol=${encodeURIComponent(trade.pair)}`, {
+        signal: AbortSignal.timeout(20_000),
+      });
+      if (response.ok) fresh = await response.json() as MarketData;
+    } catch {
+      fresh = null;
+    }
+    const marketForCapture = fresh && fresh.symbol === trade.pair
+      ? fresh
+      : market && market.symbol === trade.pair
+        ? market
+        : null;
+    if (!marketForCapture) return MARKET_CONTEXT_PAIR_MISMATCH_ERROR;
+    const rateForCapture = marketForCapture.price && !marketForCapture.price.stale
+      ? marketForCapture.price.data
+      : null;
+    const local = appendMarketContextRevision(trade, {
+      pair: trade.pair,
+      capturedAt: at,
+      market: marketForCapture,
+      marketRate: rateForCapture,
+    }, at);
+    if (!local.data) return local.error ?? MARKET_CONTEXT_CAPTURE_ERROR;
+    const revision = local.data.marketContextRevisions?.at(-1);
+    if (!revision) return MARKET_CONTEXT_CAPTURE_ERROR;
+    setBusy(true);
+    const saved = await repository.appendMarketContextRevision(trade, revision);
+    setBusy(false);
+    if (!saved.data) {
+      setError(saved.error);
+      return saved.error;
+    }
+    setJournal({ ...journal, trades: journal.trades.map(t => t.id === trade.id ? saved.data! : t) });
+    setError(null);
+    setMessage("現在のMarket Contextを履歴へ追加しました。エントリー時の原本は変更していません。");
+    return null;
+  }
   const pending = local.filter(t => !journal?.importedIds.includes(t.id));
   async function migrate() {
     if (!repository || !journal || busy) return;
@@ -93,8 +140,8 @@ export function TradeJournal({ userId, view, pair, quote, analysis, chartImageAn
       <div className="journal-toolbar"><h2>トレード記録</h2><button className="journal-primary" disabled={!journal || locked} onClick={() => { setEditor({ trade: null, mode: "new" }); setMessage(""); }}>トレードを記録</button></div>
       {editor && <TradeForm key={`${editor.mode}-${editor.trade?.id ?? "new"}`} {...editor} pair={pair} rate={rate} analysis={analysis} chartImageAnalysis={chartImageAnalysis} market={market} getPreTradeSource={getPreTradeSource} onSave={save} onCancel={() => setEditor(null)} />}
       {deleting && <div className="delete-confirm" role="alertdialog" aria-label="取引削除の確認"><p>{deleting.pair}・{deleting.quantity.toLocaleString()}通貨のクラウド記録を削除しますか？この操作は取り消せません。</p><div className="journal-actions"><button disabled={busy} className="negative" onClick={() => void remove()}>削除を確定</button><button disabled={busy} onClick={() => setDeleting(null)}>削除をキャンセル</button></div></div>}
-      <Panel title="保有ポジション" eyebrow="OPEN POSITIONS"><p className="footnote">含み損益は選択中の通貨の新鮮なレートがある場合のみ表示します。</p><TradeList trades={sorted.filter(t => t.status === "open")} quote={quote} now={now} onEdit={locked ? undefined : trade => setEditor({ trade, mode: "edit" })} onClose={locked ? undefined : trade => setEditor({ trade, mode: "close" })} onDelete={locked ? undefined : setDeleting} /></Panel>
-      <Panel title="取引履歴" eyebrow="CLOSED TRADES"><TradeList trades={sorted.filter(t => t.status === "closed")} quote={quote} now={now} onEdit={locked ? undefined : trade => setEditor({ trade, mode: "edit" })} onDelete={locked ? undefined : setDeleting} /></Panel>
+      <Panel title="保有ポジション" eyebrow="OPEN POSITIONS"><p className="footnote">含み損益は選択中の通貨の新鮮なレートがある場合のみ表示します。</p><TradeList trades={sorted.filter(t => t.status === "open")} quote={quote} now={now} onEdit={locked ? undefined : trade => setEditor({ trade, mode: "edit" })} onClose={locked ? undefined : trade => setEditor({ trade, mode: "close" })} onDelete={locked ? undefined : setDeleting} onRefreshMarketContext={locked ? undefined : refreshMarketContext} refreshBusy={busy} /></Panel>
+      <Panel title="取引履歴" eyebrow="CLOSED TRADES"><TradeList trades={sorted.filter(t => t.status === "closed")} quote={quote} now={now} onEdit={locked ? undefined : trade => setEditor({ trade, mode: "edit" })} onDelete={locked ? undefined : setDeleting} onRefreshMarketContext={locked ? undefined : refreshMarketContext} refreshBusy={busy} /></Panel>
     </>}
     {view === "performance" && journal && <Performance trades={trades} initialBalance={initialBalance} />}
   </div>;

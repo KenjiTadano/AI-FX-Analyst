@@ -334,4 +334,32 @@ test.describe("entry context", () => {
     await expect(record.getByTestId("market-context-snapshot")).toBeVisible();
     await assertNoOverflow(page);
   });
+
+  test("36 refresh confirmation cancel creates nothing", async ({ page }) => {
+    await openDashboard(page, liveOpts);
+    const form = await openTradeForm(page);
+    await fillAndSave(page, form, "T105-cancel");
+    const record = await openSavedTrade(page, "T105-cancel");
+    await expect(record.getByTestId("market-context-history-empty")).toBeVisible();
+    await record.getByTestId("market-context-refresh").click();
+    await expect(record.getByTestId("market-context-refresh-confirm")).toBeVisible();
+    await record.getByTestId("market-context-refresh-cancel").click();
+    await expect(record.getByTestId("market-context-refresh-confirm")).toHaveCount(0);
+    await expect(record.getByTestId("market-context-history-empty")).toBeVisible();
+  });
+
+  test("37 manual refresh appends history without changing original", async ({ page }) => {
+    await openDashboard(page, liveOpts);
+    const form = await openTradeForm(page);
+    await fillAndSave(page, form, "T105-refresh");
+    const record = await openSavedTrade(page, "T105-refresh");
+    const original = await record.getByTestId("market-context-captured").textContent();
+    await record.getByTestId("market-context-refresh").click();
+    await expect(record.getByTestId("market-context-refresh-confirm")).toContainText("エントリー時のMarket Contextは変更されません");
+    await record.getByTestId("market-context-refresh-ok").click();
+    await expect(page.getByText(/現在のMarket Contextを履歴へ追加しました/)).toBeVisible();
+    await expect(record.getByTestId("market-context-revision-1")).toBeVisible();
+    await expect(record.getByTestId("market-context-captured")).toHaveText(original ?? "");
+    await expect(record.getByTestId("market-context-history-empty")).toHaveCount(0);
+  });
 });

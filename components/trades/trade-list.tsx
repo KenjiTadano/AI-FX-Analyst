@@ -7,13 +7,32 @@ import { StoredEntryContext } from "./entry-context";
 import { ExitPlanDetail } from "./exit-plan";
 import { PostTradeReview } from "./post-trade-review";
 
-export function TradeList({ trades, quote, now, onEdit, onClose, onDelete }: { trades: Trade[]; quote: Quote | null; now: number; onEdit?: (t: Trade) => void; onClose?: (t: Trade) => void; onDelete?: (t: Trade) => void }) {
-  if (!trades.length) return <p className="material-empty">該当する取引はありません。</p>;
+export function TradeList({
+  trades,
+  quote,
+  now,
+  onEdit,
+  onClose,
+  onDelete,
+  onRefreshMarketContext,
+  refreshBusy,
+}: {
+  trades: Trade[];
+  quote: Quote | null;
+  now: number;
+  onEdit?: (t: Trade) => void;
+  onClose?: (t: Trade) => void;
+  onDelete?: (t: Trade) => void;
+  onRefreshMarketContext?: (t: Trade) => Promise<string | null>;
+  refreshBusy?: boolean;
+}) {
+  if (!trades.length) return <p className="material-empty">表示する取引はありません。</p>;
   return <div className="trade-list">{trades.map(trade => {
     const snapshot = trade.analysisSnapshot;
     const floating = unrealizedPnl(trade, quote, now);
     const gain = trade.status === "closed" ? trade.realizedPnl : floating;
     const alignment = computeAiAlignment(trade.side, snapshot, trade.pair);
+    const entry = <StoredEntryContext trade={trade} onRefreshMarketContext={onRefreshMarketContext} refreshBusy={refreshBusy} />;
     return <article className="trade-record" key={trade.id}>
       <div className="row"><h3>{trade.pair} <span className="badge">{trade.side === "long" ? "BUY / Long" : "SELL / Short"}</span></h3><span className="badge">{trade.status === "open" ? "保有中" : "決済済み"}</span></div>
       <p className="footnote">{trade.quantity.toLocaleString()}通貨 · Entry {trade.entryPrice.toLocaleString("ja-JP", { maximumFractionDigits: 10 })}{trade.status === "closed" ? ` → Exit ${trade.exitPrice!.toLocaleString("ja-JP", { maximumFractionDigits: 10 })}` : ` · Stop ${trade.stopLoss ?? "未設定"} · TP ${trade.takeProfit ?? "未設定"}`}</p>
@@ -48,11 +67,11 @@ export function TradeList({ trades, quote, now, onEdit, onClose, onDelete }: { t
           </>}
           {snapshot.pair !== trade.pair && <p className="neutral">元の分析は{snapshot.pair}です。通貨変更後の成績はAI未記録扱いです。</p>}
           <p className="footnote">この分析は登録時の表示内容です。後からの再分析では変わりません。</p>
-          {trade.status !== "closed" && <StoredEntryContext trade={trade} />}
+          {trade.status !== "closed" && entry}
         </div>
-      </details> : trade.status !== "closed" ? <><p className="footnote">エントリー時AI分析：保存なし</p><StoredEntryContext trade={trade} /></> : <p className="footnote">エントリー時AI分析：保存なし</p>}
+      </details> : trade.status !== "closed" ? <><p className="footnote">エントリー時AI分析：保存なし</p>{entry}</> : <p className="footnote">エントリー時AI分析：保存なし</p>}
       {trade.status !== "closed" && <ExitPlanDetail trade={trade} />}
-      {trade.status === "closed" && <PostTradeReview trade={trade} />}
+      {trade.status === "closed" && <PostTradeReview trade={trade} onRefreshMarketContext={onRefreshMarketContext} refreshBusy={refreshBusy} />}
       {trade.notes && <p className="trade-notes">{trade.notes}</p>}
       {(onEdit || onClose || onDelete) && <div className="journal-actions">{trade.status === "open" && onClose && <button onClick={() => onClose(trade)}>決済を記録</button>}{onEdit && <button onClick={() => onEdit(trade)}>編集</button>}{onDelete && <button className="negative" onClick={() => onDelete(trade)}>削除</button>}</div>}
     </article>;

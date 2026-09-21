@@ -7,6 +7,7 @@ export type TradeRow = {
   analysis_snapshot: Json | null; // Task007/013 versioned JSON; optional Task022 preTradeContext / Task027 MTF; immutable after insert
   exit_plan: Json | null; // Task031 registration Exit Plan; immutable after insert; NULL for legacy
   market_context_snapshot: Json | null; // Task104 AI-independent market context; immutable after insert; NULL for legacy
+  market_context_revisions: Json | null; // Task105 append-only manual revisions; max 20; NULL for legacy; never entry original
   local_trade_id: string | null; created_at: string; updated_at: string; version: number;
 }
 export type SettingsRow = { user_id: string; current_capital: number; target_capital: number; risk_percent: number; trade_unit: number; created_at: string; updated_at: string; version: number }
@@ -15,7 +16,13 @@ export interface Database {
   public: {
     Tables: { trades: Table<TradeRow>; user_settings: Table<SettingsRow>; profiles: Table<{ id: string; display_name: string | null; created_at: string; updated_at: string }> };
     Views: { [_ in never]: never };
-    Functions: { import_local_trades: { Args: { payload: Json }; Returns: number } };
+    Functions: {
+      import_local_trades: { Args: { payload: Json }; Returns: number };
+      append_market_context_revision: {
+        Args: { p_trade_id: string; p_expected_version: number; p_revision: Json };
+        Returns: TradeRow;
+      };
+    };
     Enums: { [_ in never]: never }; CompositeTypes: { [_ in never]: never };
   };
 }

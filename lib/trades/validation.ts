@@ -1,7 +1,7 @@
 import { pairs, type Trade, type TradeDraft, type TradeAnalysisSnapshot, type Result } from "./types";
 import { pnl, validPrice, validQuantity } from "./calculations";
 import { sanitizeExitPlan } from "./exit-plan";
-import { sanitizeMarketContextSnapshot } from "./market-context-snapshot";
+import { sanitizeMarketContextRevisions, sanitizeMarketContextSnapshot } from "./market-context-snapshot";
 import { sanitizePersistedSnapshot } from "./snapshot";
 const object = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
 export function validDate(v: unknown): v is string {
@@ -39,6 +39,15 @@ export function validateTrade(v: unknown): Result<Trade> {
   if (marketContextRaw != null && marketContextSnapshot === null) {
     return { data: null, error: "記録の市場コンテキストスナップショットが不正です。" };
   }
+  const revisionsRaw = "marketContextRevisions" in v ? v.marketContextRevisions : undefined;
+  let marketContextRevisions: ReturnType<typeof sanitizeMarketContextRevisions> | null = null;
+  if (revisionsRaw !== undefined) {
+    const sanitized = sanitizeMarketContextRevisions(revisionsRaw);
+    if (sanitized === null) {
+      return { data: null, error: "記録の市場コンテキスト再取得履歴が不正です。" };
+    }
+    marketContextRevisions = sanitized.length > 0 ? sanitized : null;
+  }
   return {
     data: {
       ...draft.data,
@@ -48,6 +57,7 @@ export function validateTrade(v: unknown): Result<Trade> {
       analysisSnapshot: snapshot,
       exitPlan,
       marketContextSnapshot,
+      marketContextRevisions,
       realizedPnl,
     },
     error: null,

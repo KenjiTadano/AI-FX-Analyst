@@ -866,6 +866,8 @@ export function tradeRows(trades: Trade[]) {
     notes: trade.notes,
     analysis_snapshot: trade.analysisSnapshot,
     exit_plan: trade.exitPlan ?? null,
+    market_context_snapshot: trade.marketContextSnapshot ?? null,
+    market_context_revisions: trade.marketContextRevisions ?? null,
     local_trade_id: null,
     created_at: trade.createdAt,
     updated_at: trade.updatedAt,

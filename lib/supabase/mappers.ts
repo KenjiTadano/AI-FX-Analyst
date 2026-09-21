@@ -30,6 +30,7 @@ export function fromTradeRow(row: Record<string, unknown>, userId: string): Trad
     analysisSnapshot: row.analysis_snapshot,
     exitPlan: row.exit_plan,
     marketContextSnapshot: row.market_context_snapshot,
+    marketContextRevisions: row.market_context_revisions,
     createdAt: iso(row.created_at),
     updatedAt: iso(row.updated_at),
   });
@@ -57,6 +58,7 @@ export function toTradeRow(trade: Trade, userId: string): Partial<TradeRow> {
     analysis_snapshot: trade.analysisSnapshot as unknown as Json,
     exit_plan: (trade.exitPlan ?? null) as unknown as Json,
     market_context_snapshot: (trade.marketContextSnapshot ?? null) as unknown as Json,
+    market_context_revisions: (trade.marketContextRevisions ?? null) as unknown as Json,
     created_at: trade.createdAt,
     updated_at: trade.updatedAt,
   };

@@ -475,6 +475,12 @@ h2 { font-size: 17px; font-weight: 600; margin-top: 4px; }
 .market-context-meta > div { display: grid; grid-template-columns: 7.5rem 1fr; gap: 8px; min-width: 0; }
 .market-context-meta dt { color: var(--muted); }
 .market-context-meta dd { margin: 0; overflow-wrap: anywhere; }
+.market-context-history { margin: 12px 0; min-width: 0; }
+.market-context-history h5 { margin: 0 0 6px; font-size: 13px; }
+.market-context-revision { margin: 6px 0; font-size: 12px; }
+.market-context-revision summary { cursor: pointer; color: var(--green); padding: 4px 0; overflow-wrap: anywhere; }
+.market-context-refresh { margin: 10px 0; min-width: 0; }
+.market-context-refresh-confirm { margin-top: 8px; }
 .pretrade-perf-panel, .mtf-perf-panel, .pretrade-perf-section, .mtf-perf-section, .pretrade-perf-coverage, .mtf-perf-coverage { min-width: 0; }
 .pretrade-perf-section, .mtf-perf-section { margin-top: 16px; }
 .pretrade-perf-section h3, .mtf-perf-section h3 { font-size: 14px; margin: 0 0 8px; overflow-wrap: anywhere; }

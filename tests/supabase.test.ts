@@ -43,8 +43,24 @@ function fixture() {
     }; return q;
   }
   const client = { auth: { getUser: async () => ({ data: { user: state.user ? { id: state.user } : null }, error: null }) }, from: query,
-    rpc: async (_name: string, { payload }: { payload: Record<string, unknown>[] }) => {
+    rpc: async (name: string, args: Record<string, unknown>) => {
       state.rpcCalls++; if (state.failure) return { data: null, error: { message: "SECRET" } };
+      if (name === "append_market_context_revision") {
+        const tradeId = String(args.p_trade_id);
+        const expected = Number(args.p_expected_version);
+        const revision = args.p_revision as Record<string, unknown>;
+        const row = state.rows.find(r => r.id === tradeId && r.user_id === state.user);
+        if (!row || Number(row.version) !== expected) return { data: null, error: { message: "conflict" } };
+        const current = Array.isArray(row.market_context_revisions) ? row.market_context_revisions as unknown[] : [];
+        if (current.length >= 20) return { data: null, error: { message: "limit" } };
+        Object.assign(row, {
+          market_context_revisions: [...current, revision],
+          version: Number(row.version) + 1,
+          updated_at: now,
+        });
+        return { data: row, error: null };
+      }
+      const payload = args.payload as Record<string, unknown>[];
       let count = 0; for (const r of payload) { const key = String(r.local_trade_id); if (!state.imported.has(key)) { state.imported.add(key); count++; } }
       return { data: count, error: null };
     },
@@ -102,7 +118,7 @@ test("create edit close delete return only acknowledged database state", async (
   assert.equal((await f.repository.create(trade())).data?.id, id);
   const edited = { ...trade(), notes: "edited" };
   assert.equal((await f.repository.update(edited)).data?.notes, "edited");
-  assert.equal("analysis_snapshot" in f.state.writes[0], false); assert.equal("exit_plan" in f.state.writes[0], false); assert.equal("market_context_snapshot" in f.state.writes[0], false); assert.equal("user_id" in f.state.writes[0], false);
+  assert.equal("analysis_snapshot" in f.state.writes[0], false); assert.equal("exit_plan" in f.state.writes[0], false); assert.equal("market_context_snapshot" in f.state.writes[0], false); assert.equal("market_context_revisions" in f.state.writes[0], false); assert.equal("user_id" in f.state.writes[0], false);
   const closed = closeTrade(edited, 154, now, now).data!;
   assert.equal((await f.repository.update(closed)).data?.realizedPnl, 500);
   assert.equal((await f.repository.remove(closed)).data, true); assert.equal(f.state.rows.length, 0);

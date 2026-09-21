@@ -4,6 +4,8 @@ import { fromSettingsRow, fromTradeRow, numeric, toSettingsRow, toTradeRow, UUID
 import type { Result, Trade } from "../trades/types";
 import type { RiskSettings } from "../risk/types";
 import { MAX_TRADES } from "../trades/repository";
+import type { MarketContextRevision } from "../trades/market-context-snapshot";
+import { sanitizeMarketContextRevision } from "../trades/market-context-snapshot";
 export interface CloudJournal { trades: Trade[]; importedIds: string[] }
 export interface CloudTradeRepository {
   load(): Promise<Result<CloudJournal>>;
@@ -11,6 +13,7 @@ export interface CloudTradeRepository {
   update(trade: Trade): Promise<Result<Trade>>;
   remove(trade: Trade): Promise<Result<boolean>>;
   importTrades(trades: Trade[]): Promise<Result<number>>;
+  appendMarketContextRevision(trade: Trade, revision: MarketContextRevision): Promise<Result<Trade>>;
 }
 export function createCloudRepository(client: SupabaseClient<Database>, userId: string): CloudTradeRepository {
   const versions = new Map<string, number>();
@@ -42,7 +45,7 @@ export function createCloudRepository(client: SupabaseClient<Database>, userId: 
     }),
     update: trade => attempt(async () => {
       const row = toTradeRow(trade, userId);
-      delete row.id; delete row.user_id; delete row.created_at; delete row.updated_at; delete row.analysis_snapshot; delete row.exit_plan; delete row.market_context_snapshot;
+      delete row.id; delete row.user_id; delete row.created_at; delete row.updated_at; delete row.analysis_snapshot; delete row.exit_plan; delete row.market_context_snapshot; delete row.market_context_revisions;
       const version = versions.get(trade.id); if (!version) throw new Error("reload");
       const { data, error } = await client.from("trades").update(row).eq("id", trade.id).eq("user_id", userId).eq("version", version).select().single();
       if (error || !data) throw new Error("update"); return mapped(data);
@@ -62,6 +65,19 @@ export function createCloudRepository(client: SupabaseClient<Database>, userId: 
         if (error || typeof data !== "number") throw new Error("import"); inserted += data;
       }
       return inserted;
+    }),
+    appendMarketContextRevision: (trade, revision) => attempt(async () => {
+      if (!UUID.test(trade.id)) throw new Error("id");
+      const sanitized = sanitizeMarketContextRevision(revision, trade.pair);
+      if (!sanitized) throw new Error("revision");
+      const version = versions.get(trade.id); if (!version) throw new Error("reload");
+      const { data, error } = await client.rpc("append_market_context_revision", {
+        p_trade_id: trade.id,
+        p_expected_version: version,
+        p_revision: sanitized as unknown as Json,
+      });
+      if (error || !data) throw new Error("append");
+      return mapped(data);
     }),
   };
 }

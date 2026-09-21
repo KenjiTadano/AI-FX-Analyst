@@ -15,7 +15,15 @@ function row(label: string, value: string, testId: string, valueClass?: string) 
   return <div><dt>{label}</dt><dd className={valueClass} data-testid={testId}>{value}</dd></div>;
 }
 
-export function PostTradeReview({ trade }: { trade: Trade }) {
+export function PostTradeReview({
+  trade,
+  onRefreshMarketContext,
+  refreshBusy,
+}: {
+  trade: Trade;
+  onRefreshMarketContext?: (trade: Trade) => Promise<string | null>;
+  refreshBusy?: boolean;
+}) {
   const review = buildPostTradeReview(trade);
   if (!review) return null;
   const pnl = review.outcome.realizedPnl;
@@ -43,7 +51,7 @@ export function PostTradeReview({ trade }: { trade: Trade }) {
       {review.contextState === "unreadable" && (
         <p className="footnote" data-testid="post-trade-review-unreadable">{POST_TRADE_REVIEW_UNREADABLE}</p>
       )}
-      <StoredEntryContext trade={trade} />
+      <StoredEntryContext trade={trade} onRefreshMarketContext={onRefreshMarketContext} refreshBusy={refreshBusy} />
       {review.contextLabels.length > 0 && (
         <div className="posttrade-review-labels">
           <p>この取引のContext</p>

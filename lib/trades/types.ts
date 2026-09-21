@@ -4,7 +4,7 @@ import type { EntryTriggerEvaluationStatus, StructuredEntryTrigger } from "../ai
 import type { MultiTimeframeAnalysis } from "../market/multi-timeframe";
 import type { MarketRegimeAnalysis } from "../market/market-regime";
 import type { TradeExitPlan } from "./exit-plan";
-import type { MarketContextSnapshot } from "./market-context-snapshot";
+import type { MarketContextRevision, MarketContextSnapshot } from "./market-context-snapshot";
 
 export const pairs = ["USD/JPY", "EUR/JPY", "GBP/JPY"] as const;
 export type TradePair = (typeof pairs)[number];
@@ -153,6 +153,8 @@ export interface Trade extends TradeDraft {
   exitPlan?: TradeExitPlan | null;
   /** Task104 registration-time market context. AI-independent. Immutable after create. Optional for legacy. */
   marketContextSnapshot?: MarketContextSnapshot | null;
+  /** Task105 manual market context re-captures. Append-only. Never used as entry original / PI input. */
+  marketContextRevisions?: MarketContextRevision[] | null;
   createdAt: string;
   updatedAt: string;
 }

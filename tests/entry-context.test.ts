@@ -595,7 +595,7 @@ test("AZ no additional fetch", () => {
 });
 
 test("BA no OpenAI call", () => {
-  assert.doesNotMatch(SOURCE, /openai|responses\.create|vision/i);
+  assert.doesNotMatch(SOURCE, /openai|responses\.create|\bvision\b/i);
 });
 
 test("BB no Supabase extra query", () => {
