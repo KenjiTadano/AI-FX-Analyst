@@ -5,6 +5,7 @@ import Link from "next/link";
 import { TechnicalPanel, useMarket } from "./market";
 import { MultiTimeframePanel } from "./multi-timeframe";
 import { MarketRegimePanel } from "./market-regime";
+import { SimilarHistoricalContextPanel } from "./similar-historical-context";
 import { NextEventBanner } from "./economic-calendar";
 import { FundamentalPanel, useFundamentals } from "./fundamental";
 import { ChartAnalysisPanel } from "./chart-analysis";
@@ -111,6 +112,19 @@ export function Dashboard({ analyses, account }: { analyses: FxAnalysis[]; accou
             <MarketRegimePanel pair={selectedPair} data={market?.data && market.data.symbol === selectedPair ? market.data : null} error={market?.error ?? null} />
             <FundamentalPanel symbol={selectedPair} result={fundamentals} />
           </div>
+          <SimilarHistoricalContextPanel
+            pair={selectedPair}
+            market={market?.data && market.data.symbol === selectedPair ? market.data : null}
+            marketRate={liveRate}
+            trades={trades}
+            capturedAt={
+              (market?.data?.price.fetchedAt
+                && /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/.test(market.data.price.fetchedAt)
+                && new Date(market.data.price.fetchedAt).toISOString() === market.data.price.fetchedAt)
+                ? market.data.price.fetchedAt
+                : "2026-09-21T12:00:00.000Z"
+            }
+          />
         </section>
         <details className="ia-disclosure" open>
           <summary>分析の詳細（根拠・シナリオ）</summary>

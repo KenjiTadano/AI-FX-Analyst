@@ -473,6 +473,20 @@ h2 { font-size: 17px; font-weight: 600; margin-top: 4px; }
 .trade-evolution-section, .te-dimension, .te-cards { min-width: 0; }
 .te-dimension { margin-top: 12px; }
 .te-dimension > h4 { font-size: 13px; margin: 0 0 6px; overflow-wrap: anywhere; }
+.similar-historical-panel, .similar-match-list, .similar-match-card { min-width: 0; }
+.similar-match-list { display: grid; gap: 12px; margin-top: 12px; }
+.similar-match-card { background: #172232; border-radius: 8px; padding: 14px; min-width: 0; }
+.similar-match-header { display: flex; flex-wrap: wrap; gap: 8px 14px; font-size: 13px; margin-bottom: 6px; }
+.similar-outcome { display: grid; gap: 4px; margin: 8px 0; min-width: 0; }
+.similar-outcome strong { font-size: 18px; overflow-wrap: anywhere; }
+.similar-dimension-list { display: grid; gap: 4px 12px; margin: 8px 0 0; font-size: 12px; min-width: 0; }
+.similar-dimension-list > div { display: grid; grid-template-columns: 8.5rem minmax(0, 1fr); gap: 8px; }
+.similar-dimension-list dt { color: var(--muted); }
+.similar-dimension-list dd { margin: 0; overflow-wrap: anywhere; }
+.similar-details-toggle { margin-top: 8px; cursor: pointer; background: transparent; border: 1px solid #405169; border-radius: 6px; color: inherit; padding: 6px 10px; font-size: 12px; }
+@media (max-width: 540px) {
+  .similar-dimension-list > div { grid-template-columns: 1fr; }
+}
 .market-context-snapshot { margin: 12px 0; min-width: 0; }
 .market-context-meta { display: grid; gap: 6px; margin: 8px 0; font-size: 13px; }
 .market-context-meta > div { display: grid; grid-template-columns: 7.5rem 1fr; gap: 8px; min-width: 0; }
