@@ -6,6 +6,7 @@ import { TechnicalPanel, useMarket } from "./market";
 import { MultiTimeframePanel } from "./multi-timeframe";
 import { MarketRegimePanel } from "./market-regime";
 import { SimilarHistoricalContextPanel } from "./similar-historical-context";
+import { TradingDecisionWorkspacePanel } from "./trading-decision-workspace";
 import { NextEventBanner } from "./economic-calendar";
 import { FundamentalPanel, useFundamentals } from "./fundamental";
 import { ChartAnalysisPanel } from "./chart-analysis";
@@ -90,6 +91,27 @@ export function Dashboard({ analyses, account }: { analyses: FxAnalysis[]; accou
       <nav className="journal-nav" aria-label="ダッシュボード表示">{([["analysis", "分析"], ["chart", "チャート読取"], ["trades", "トレード"], ["performance", "成績"]] as const).map(([key, label]) => <button key={key} type="button" aria-current={view === key ? "page" : undefined} onClick={() => setView(key)}>{label}</button>)}</nav>
       <p className="footnote ia-flow" data-testid="dashboard-flow">分析（市場 → AI判断 → トレード準備）→ トレード記録 → 成績。過去の取引は保存時点の情報のままです。</p>
       <div hidden={view !== "analysis"}>
+        <section className="ia-section" aria-label="Trading Decision Workspace" data-testid="ia-decision-workspace">
+          <TradingDecisionWorkspacePanel
+            pair={selectedPair}
+            analysis={aiResponse?.data && aiResponse.data.pair === selectedPair ? aiResponse.data : null}
+            trades={trades}
+            riskSettings={riskSettings}
+            currentRate={liveRate}
+            calendar={fundamentals?.data?.calendar}
+            market={market?.data && market.data.symbol === selectedPair ? market.data : null}
+            marketError={market?.error ?? null}
+            rateDecimals={analysis.decimals}
+            userId={userId}
+            capturedAt={
+              (market?.data?.price.fetchedAt
+                && /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/.test(market.data.price.fetchedAt)
+                && new Date(market.data.price.fetchedAt).toISOString() === market.data.price.fetchedAt)
+                ? market.data.price.fetchedAt
+                : "2026-09-21T12:00:00.000Z"
+            }
+          />
+        </section>
         <section className="ia-section" aria-labelledby="ia-analysis" data-testid="ia-analysis">
           <h2 id="ia-analysis">Analysis · {analysis.pair}</h2>
           <p className="footnote">Direction と Action は別です。Direction が BUY/SELL でも Action が WAIT なら待機です。</p>

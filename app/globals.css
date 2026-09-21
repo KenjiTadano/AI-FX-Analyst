@@ -484,8 +484,36 @@ h2 { font-size: 17px; font-weight: 600; margin-top: 4px; }
 .similar-dimension-list dt { color: var(--muted); }
 .similar-dimension-list dd { margin: 0; overflow-wrap: anywhere; }
 .similar-details-toggle { margin-top: 8px; cursor: pointer; background: transparent; border: 1px solid #405169; border-radius: 6px; color: inherit; padding: 6px 10px; font-size: 12px; }
+.trading-decision-workspace, .tdw-layer, .tdw-meta, .tdw-decision-grid, .tdw-mtf, .tdw-regime, .tdw-similar { min-width: 0; }
+.tdw-layer { margin-top: 14px; }
+.tdw-layer > h3 { font-size: 13px; margin: 0 0 8px; overflow-wrap: anywhere; }
+.tdw-meta, .tdw-decision-grid, .tdw-mtf, .tdw-regime, .tdw-similar {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 10px 12px;
+  min-width: 0;
+}
+.tdw-field { min-width: 0; }
+.tdw-field strong { display: block; margin-top: 4px; font-size: 15px; overflow-wrap: anywhere; }
+.tdw-field small { display: block; margin-top: 4px; }
+.tdw-mtf > div { background: #172232; border-radius: 6px; padding: 10px; min-width: 0; }
+.tdw-mtf strong { display: block; margin-top: 4px; text-transform: lowercase; overflow-wrap: anywhere; }
+.tdw-jumps { display: flex; flex-wrap: wrap; gap: 10px 14px; margin-top: 12px; }
+.tdw-jump { color: var(--green); font-size: 13px; overflow-wrap: anywhere; }
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
 @media (max-width: 540px) {
   .similar-dimension-list > div { grid-template-columns: 1fr; }
+  .tdw-meta, .tdw-decision-grid, .tdw-mtf, .tdw-regime, .tdw-similar { grid-template-columns: 1fr; }
 }
 .market-context-snapshot { margin: 12px 0; min-width: 0; }
 .market-context-meta { display: grid; gap: 6px; margin: 8px 0; font-size: 13px; }
