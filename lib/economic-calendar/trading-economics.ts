@@ -4,6 +4,7 @@ import type { EconomicEvent } from "../fundamental/types";
 import type { EconomicCalendarProvider } from "./provider";
 import { normalizeTradingEconomics } from "./normalize";
 import { calendarTtl } from "./risk-window";
+import { recordApiFailure, recordApiUsage } from "../api-usage";
 export function createTradingEconomics(apiKey: string, fetcher: typeof fetch = fetch, now = Date.now, cache = new ResourceCache(now)): EconomicCalendarProvider {
   return { async calendar() {
     if (!apiKey) return unavailable<EconomicEvent[]>("Trading Economics", "not_configured");
@@ -12,11 +13,11 @@ export function createTradingEconomics(apiKey: string, fetcher: typeof fetch = f
       const countries = "united states,japan,euro area,united kingdom".split(",").map(encodeURIComponent).join(",");
       const url = `https://api.tradingeconomics.com/calendar/country/${countries}/${date(-1)}/${date(7)}?f=json`;
       let response: Response;
-      try { response = await fetcher(url, { headers: { Authorization: apiKey }, cache: "no-store", redirect: "error", signal: AbortSignal.timeout(10_000) }); }
-      catch { throw new ProviderError("network"); }
-      if ([401, 403, 429].includes(response.status)) throw new ProviderError(response.status === 401 ? "unauthorized" : response.status === 403 ? "forbidden" : "rate_limited");
-      if (!response.ok) throw new ProviderError("network");
-      try { return normalizeTradingEconomics(await response.json(), now()); } catch { throw new ProviderError("invalid_response"); }
+      try { recordApiUsage("Trading Economics", "request"); response = await fetcher(url, { headers: { Authorization: apiKey }, cache: "no-store", redirect: "error", signal: AbortSignal.timeout(10_000) }); }
+      catch (error) { recordApiFailure("Trading Economics", error instanceof Error && ["TimeoutError", "AbortError"].includes(error.name) ? "timeout" : "providerError"); throw new ProviderError("network"); }
+      if ([401, 403, 429].includes(response.status)) { recordApiFailure("Trading Economics", response.status === 429); throw new ProviderError(response.status === 401 ? "unauthorized" : response.status === 403 ? "forbidden" : "rate_limited"); }
+      if (!response.ok) { recordApiFailure("Trading Economics"); throw new ProviderError("network"); }
+      try { return normalizeTradingEconomics(await response.json(), now()); } catch { recordApiFailure("Trading Economics"); throw new ProviderError("invalid_response"); }
     });
   } };
 }

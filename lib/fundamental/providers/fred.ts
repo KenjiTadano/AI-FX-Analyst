@@ -1,6 +1,7 @@
 import { ResourceCache, cachePolicy } from "../cache";
 import { FRED_SERIES, type FredSeriesDefinition } from "../fred-series";
 import { ProviderError, unavailable } from "../resource";
+import { recordApiFailure, recordApiUsage } from "../../api-usage";
 import type { EconomicIndicatorValue, ErrorCode, NormalizedBatch } from "../types";
 
 type FredObservation = { date?: unknown; value?: unknown };
@@ -101,19 +102,21 @@ export function createFred(apiKey: string, fetcher: typeof fetch = fetch, cache 
     if (def.transformation !== "lin") url.searchParams.set("units", def.transformation);
     let response: Response;
     try {
+      recordApiUsage("FRED", "request");
       response = await fetcher(url.toString(), { cache: "no-store", redirect: "error", signal: AbortSignal.timeout(10_000) });
     } catch (error) {
+      recordApiFailure("FRED", error instanceof Error && ["TimeoutError", "AbortError"].includes(error.name) ? "timeout" : "providerError");
       if (error instanceof Error && ["TimeoutError", "AbortError"].includes(error.name)) throw new ProviderError("network");
       throw new ProviderError("network");
     }
-    if (!response.ok) throw new ProviderError(classifyHttp(response.status));
+    if (!response.ok) { recordApiFailure("FRED", response.status === 429); throw new ProviderError(classifyHttp(response.status)); }
     let body: FredObservationsBody;
-    try { body = await response.json() as FredObservationsBody; } catch { throw new ProviderError("invalid_response"); }
-    if (body && typeof body === "object" && (body.error_code != null || typeof body.error_message === "string")) throw new ProviderError("invalid_response");
-    if (!Array.isArray(body.observations)) throw new ProviderError("invalid_response");
+    try { body = await response.json() as FredObservationsBody; } catch { recordApiFailure("FRED"); throw new ProviderError("invalid_response"); }
+    if (body && typeof body === "object" && (body.error_code != null || typeof body.error_message === "string")) { recordApiFailure("FRED"); throw new ProviderError("invalid_response"); }
+    if (!Array.isArray(body.observations)) { recordApiFailure("FRED"); throw new ProviderError("invalid_response"); }
     const updatedAt = new Date(now()).toISOString();
     const indicator = toIndicator(def, body.observations as FredObservation[], now(), updatedAt);
-    if (indicator.value === null || indicator.observationDate === null) throw new ProviderError("invalid_response");
+    if (indicator.value === null || indicator.observationDate === null) { recordApiFailure("FRED"); throw new ProviderError("invalid_response"); }
     return indicator;
   }
 

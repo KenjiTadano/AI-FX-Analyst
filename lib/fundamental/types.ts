@@ -13,6 +13,7 @@ export interface DataResource<T> {
   status: ResourceStatus;
   provider: string;
   fetchedAt: string | null;
+  stale?: boolean;
   error: { code: ErrorCode; message: string } | null;
   warnings: string[];
 }
@@ -116,7 +117,10 @@ export interface FundamentalData {
   sentiment: DataResource<SentimentData>;
   factors: CurrencyFactors[];
 }
-export interface NormalizedBatch<T> { items: T[]; warnings: string[] }
+export interface NormalizedBatch<T> {
+  items: T[];
+  warnings: string[];
+}
 export interface FundamentalProviders {
   news(): Promise<DataResource<NewsItem[]>>;
   calendar(): Promise<DataResource<EconomicEvent[]>>;

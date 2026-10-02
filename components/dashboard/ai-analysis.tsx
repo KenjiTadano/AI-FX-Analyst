@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { canPoll, scheduleVisibleRefresh } from "@/lib/client/polling";
+import { MARKET_DASHBOARD_REFRESH_MS } from "@/lib/market/types";
 import { tradeSignals, type AIAnalysis, type AnalysisResponse, type TradeSignal } from "@/lib/ai/types";
 import { categoryLabels } from "@/lib/ai/input";
 import {
@@ -36,10 +38,11 @@ export function useAIAnalysis(pair: string, chartImageAnalysis: ChartImageAnalys
   const [manualToken, setManualToken] = useState(0);
   const inFlight = useRef(false);
 
-  const run = useCallback(async (signal: AbortSignal, mode: "auto" | "manual", chart: ChartImageAnalysis | null) => {
-    if (inFlight.current) return;
+  const run = useCallback(async (signal: AbortSignal, mode: "auto" | "manual", chart: ChartImageAnalysis | null): Promise<number> => {
+    if (inFlight.current) return MARKET_DASHBOARD_REFRESH_MS;
     inFlight.current = true;
     if (mode === "manual") setRefreshing(true);
+    let nextPollMs = MARKET_DASHBOARD_REFRESH_MS;
     try {
       const response = chart
         ? await fetch("/api/analysis", {
@@ -56,12 +59,15 @@ export function useAIAnalysis(pair: string, chartImageAnalysis: ChartImageAnalys
       const value: AnalysisResponse = await response.json();
       if (!response.ok || !value.success || !value.data || value.data.pair !== pair) throw new Error("unavailable");
       if (!signal.aborted) setResult({ pair, response: value });
+      const expiresAt = Date.parse(value.data.expiresAt);
+      if (Number.isFinite(expiresAt)) nextPollMs = Math.max(1000, Math.min(5 * 60_000, expiresAt - Date.now()));
     } catch {
       if (!signal.aborted) setResult({ pair, response: { success: false, data: null, error: { code: "unavailable", message: "現在AI総合分析を取得できません。既存テクニカルは引き続き確認できます。" }, cached: false } });
     } finally {
       inFlight.current = false;
       if (mode === "manual" && !signal.aborted) setRefreshing(false);
     }
+    return nextPollMs;
   }, [pair]);
 
   useEffect(() => {
@@ -69,24 +75,23 @@ export function useAIAnalysis(pair: string, chartImageAnalysis: ChartImageAnalys
     let timer: ReturnType<typeof setTimeout>;
     let first = true;
     async function refresh() {
+      if (!canPoll(document.visibilityState)) return;
+      clearTimeout(timer);
       const mode = first && manualToken > 0 ? "manual" : "auto";
       first = false;
-      // Always fetch the first load / manual refresh. Skip only scheduled polls while the tab is hidden.
-      await run(controller.signal, mode, chartImageAnalysis);
-      if (!controller.signal.aborted) {
-        timer = setTimeout(function poll() {
-          if (document.visibilityState === "hidden") {
-            timer = setTimeout(poll, 60_000);
-            return;
-          }
-          void refresh();
-        }, 60_000);
-      }
+      const nextPollMs = await run(controller.signal, mode, chartImageAnalysis);
+      if (!controller.signal.aborted && canPoll(document.visibilityState)) timer = setTimeout(() => void refresh(), nextPollMs);
     }
-    void refresh();
+    function onVisibilityChange() {
+      clearTimeout(timer);
+      if (canPoll(document.visibilityState)) timer = scheduleVisibleRefresh(() => void refresh());
+    }
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    if (canPoll(document.visibilityState)) void refresh();
     return () => {
       controller.abort();
       clearTimeout(timer);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
       // Strict Mode remount can otherwise leave inFlight=true and skip the next fetch forever.
       inFlight.current = false;
     };

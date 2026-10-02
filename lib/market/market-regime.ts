@@ -320,10 +320,11 @@ export function marketRegimeForPair(
   analyzedAt?: string,
 ): MarketRegimeAnalysis | null {
   if (!market || market.symbol !== pair) return null;
-  const fetchedAt = market.timeframes["1h"]?.fetchedAt ?? market.price.fetchedAt ?? new Date(0).toISOString();
+  const hourly = market.timeframes["1h"];
+  const fetchedAt = hourly.fetchedAt ?? market.price.fetchedAt ?? new Date(0).toISOString();
   return analyzeMarketRegime({
     pair,
-    candles: market.timeframes["1h"]?.data?.candles ?? [],
+    candles: hourly.stale ? [] : hourly.data?.candles ?? [],
     analyzedAt: analyzedAt ?? fetchedAt,
   });
 }

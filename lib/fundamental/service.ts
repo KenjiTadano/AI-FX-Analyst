@@ -26,9 +26,11 @@ export async function assembleFundamentals(symbol: Symbol, providers: Fundamenta
     Promise.resolve().then(() => providers.centralBanks({ currencies, news, calendar })),
     Promise.resolve().then(() => providers.sentiment(currencies)),
   ]);
+  const centralBanks = settled(bankResult, "centralBanks");
+  if (news.stale || calendar.stale) centralBanks.stale = true;
   return {
     schemaVersion: 1, symbol, baseCurrency, quoteCurrency, generatedAt: new Date(now).toISOString(), news, calendar, macroeconomic,
-    centralBanks: settled(bankResult, "centralBanks"), sentiment: settled(sentimentResult, "sentiment"),
+    centralBanks, sentiment: settled(sentimentResult, "sentiment"),
     factors: currencies.map(currency => ({ currency, newsIds: (news.data ?? []).filter(item => item.currencies.includes(currency)).map(item => item.id), economicEventIds: (calendar.data ?? []).filter(event => event.currency === currency).map(event => event.id), centralBank: bankNames[currency].abbreviation, impactDirection: null })),
   };
 }

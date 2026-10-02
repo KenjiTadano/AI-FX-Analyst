@@ -5,10 +5,13 @@ import vm from 'node:vm';
 import ts from 'typescript';
 let now = Date.now();
 class Clock extends Date { static now() { return now; } }
-function load(file, env = {}, fetch = async () => { throw Error('unexpected fetch'); }) {
+function load(file, env = {}, fetch = async () => { throw Error('unexpected fetch'); }, modules = new Map()) {
+  const resolved = path.resolve(file);
+  if (modules.has(resolved)) return modules.get(resolved);
   const exports = {};
+  modules.set(resolved, exports);
   const source = ts.transpileModule(fs.readFileSync(file, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
-  vm.runInNewContext(source, { exports, require: name => name === 'server-only' ? {} : load(path.resolve(path.dirname(file), name + '.ts'), env, fetch), process: { env }, fetch, Date: Clock, URL, URLSearchParams, AbortSignal, console });
+  vm.runInNewContext(source, { exports, require: name => name === 'server-only' ? {} : load(path.resolve(path.dirname(file), name + '.ts'), env, fetch, modules), process: { env }, fetch, Date: Clock, URL, URLSearchParams, AbortSignal, console });
   return exports;
 }
 const { calculateIndicators: calc } = load('lib/market/indicators.ts');
@@ -48,9 +51,90 @@ assert.equal(calc([]).sma20, null); assert.equal(calc(bars.slice(0,14)).rsi14, n
   assert.equal(isolated.daily.data, null);
   assert.match(isolated.daily.error, /利用上限/);
   now += 61000; fail = true;
-  const stale = await client.getMarketData('USD/JPY'); assert.equal(stale.price.stale,true); assert.equal(stale.price.data,150.125); assert.match(stale.price.error,/利用上限/);
+  const refreshing = await client.getMarketData('USD/JPY'); assert.equal(refreshing.price.stale,true); assert.equal(refreshing.price.data,150.125); assert.equal(refreshing.price.error,null);
+  await new Promise(resolve => setImmediate(resolve));
+  const stale = await client.getMarketData('USD/JPY'); assert.equal(stale.price.stale,true); assert.match(stale.price.error,/利用上限/);
   assert.equal(stale.timeframes['1h'].error,null);
   const before = count; await client.getMarketData('GBP/JPY'); assert.equal(count,before);
   assert(!JSON.stringify(stale).includes('secret upstream'));
+  let tenMinuteCalls = 0;
+  const measurementModules = new Map();
+  const measuredFetch = async url => {
+    tenMinuteCalls++;
+    return {ok:true, status:200, json:async () => new URL(url).pathname === '/price' ? {price:'150.125'} : {values: [...bars].reverse().map(c => ({...c, datetime:c.time.slice(0,19).replace('T',' ')}))}};
+  };
+  const measured = load('lib/market/client.ts', {TWELVE_DATA_API_KEY:'test-only'}, measuredFetch, measurementModules);
+  const measurementStart = now;
+  for (let minute = 0; minute < 10; minute++) {
+    now = measurementStart + minute * 60_000;
+    await measured.getMarketData('USD/JPY');
+    await new Promise(resolve => setImmediate(resolve));
+  }
+  now = measurementStart;
+  assert.equal(tenMinuteCalls, 15);
+  const metrics = load('lib/api-usage.ts', {}, measuredFetch, measurementModules).getApiUsageSnapshot().providers['Twelve Data'];
+  assert.equal(metrics.requests, 15);
+  assert.equal(metrics.cacheMisses, 15);
+  assert.equal(metrics.cacheHits, 35);
+  assert.equal(metrics.errors, 0);
+  console.log('PASS: 10-minute mock after = 15 Twelve Data requests (10 price + 5 series); 35 cache hits');
+  now = measurementStart + 10 * 60_000;
+  assert.equal((await measured.getMarketData('EUR/JPY')).symbol, 'EUR/JPY');
+  now += 60_001;
+  assert.equal((await measured.getMarketData('GBP/JPY')).symbol, 'GBP/JPY');
+  assert.equal(tenMinuteCalls, 25);
+  let holdPrice = false, releasePrice;
+  const swr = load('lib/market/client.ts', {TWELVE_DATA_API_KEY:'test-only'}, async url => {
+    if (holdPrice && new URL(url).pathname === '/price') await new Promise(resolve => { releasePrice = resolve; });
+    return {ok:true, status:200, json:async () => new URL(url).pathname === '/price' ? {price:'150.125'} : {values: [...bars].reverse().map(c => ({...c, datetime:c.time.slice(0,19).replace('T',' ')}))}};
+  });
+  now = measurementStart;
+  await swr.getMarketData('USD/JPY');
+  now = measurementStart + 61_000;
+  holdPrice = true;
+  const staleWhileRefreshing = await swr.getMarketData('USD/JPY');
+  assert.equal(staleWhileRefreshing.price.data, 150.125);
+  assert.equal(staleWhileRefreshing.price.stale, true);
+  holdPrice = false;
+  releasePrice();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal((await swr.getMarketData('USD/JPY')).price.stale, false);
+  let quotaCalls = 0, dailyQuota = true;
+  const quotaModules = new Map();
+  const quotaFetch = async url => {
+    quotaCalls++;
+    if (dailyQuota) return {ok:true, status:200, json:async () => ({status:'error', code:429, message:'Daily API credits exceeded'})};
+    return {ok:true, status:200, json:async () => new URL(url).pathname === '/price' ? {price:'150.125'} : {values: [...bars].reverse().map(c => ({...c, datetime:c.time.slice(0,19).replace('T',' ')}))}};
+  };
+  const quotaClient = load('lib/market/client.ts', {TWELVE_DATA_API_KEY:'test-only'}, quotaFetch, quotaModules);
+  const quotaStart = now;
+  await quotaClient.getMarketData('USD/JPY');
+  const requestsAtQuota = quotaCalls;
+  now = quotaStart + 61_000;
+  await quotaClient.getMarketData('USD/JPY');
+  assert.equal(quotaCalls, requestsAtQuota);
+  now = Date.UTC(new Date(quotaStart).getUTCFullYear(), new Date(quotaStart).getUTCMonth(), new Date(quotaStart).getUTCDate() + 1);
+  dailyQuota = false;
+  await quotaClient.getMarketData('USD/JPY');
+  assert.ok(quotaCalls > requestsAtQuota);
+  const quotaMetrics = load('lib/api-usage.ts', {}, quotaFetch, quotaModules).getApiUsageSnapshot().providers['Twelve Data'];
+  assert.ok(quotaMetrics.dailyQuota > 0);
+  let retryRequests = 0, retryAfterActive = true;
+  const retryClient = load('lib/market/client.ts', {TWELVE_DATA_API_KEY:'test-only'}, async url => {
+    retryRequests++;
+    if (retryAfterActive) return {ok:false, status:429, headers:new Headers({'retry-after':'120'}), json:async () => ({message:'minute limit'})};
+    return {ok:true, status:200, json:async () => new URL(url).pathname === '/price' ? {price:'150.125'} : {values: [...bars].reverse().map(c => ({...c, datetime:c.time.slice(0,19).replace('T',' ')}))}};
+  });
+  now = measurementStart;
+  await retryClient.getMarketData('USD/JPY');
+  assert.equal(retryRequests, 5);
+  now = measurementStart + 60_000;
+  await retryClient.getMarketData('USD/JPY');
+  assert.equal(retryRequests, 5);
+  now = measurementStart + 120_000;
+  retryAfterActive = false;
+  await retryClient.getMarketData('USD/JPY');
+  assert.equal(retryRequests, 10);
+  now = measurementStart;
   console.log('PASS: SMA/RSI/ATR/trends, missing key, normalization, concurrent deduplication, TTL, partial failure, stale data, HTTP-200 rate limit, secret suppression');
 })().catch(e => {console.error(e); process.exitCode=1;});

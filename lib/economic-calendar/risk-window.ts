@@ -26,7 +26,7 @@ export function riskState(events: EconomicEvent[], now: number, policy = riskWin
 }
 export function calendarKnown(resource: DataResource<EconomicEvent[]> | undefined, now: number) {
   const age = resource?.fetchedAt ? now - Date.parse(resource.fetchedAt) : Infinity;
-  return !!resource && resource.data !== null && ["ok", "empty"].includes(resource.status) && age >= 0 && age <= 60 * 60_000;
+  return !!resource && !resource.stale && resource.data !== null && ["ok", "empty"].includes(resource.status) && age >= 0 && age <= 60 * 60_000;
 }
 export function nextHigh(events: EconomicEvent[], now: number) {
   return events.filter(event => event.importance === "high" && event.scheduledAt && Date.parse(event.scheduledAt) > now && event.actual === null).sort((a, b) => a.scheduledAt!.localeCompare(b.scheduledAt!))[0] ?? null;

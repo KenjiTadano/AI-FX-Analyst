@@ -21,10 +21,12 @@ function trendClass(trend: TimeframeTrend) {
 
 export function MultiTimeframePanel({ pair, data, error }: { pair: Symbol; data: MarketData | null; error: string | null }) {
   const analysis = multiTimeframeForPair(data, pair, data?.daily?.fetchedAt ?? data?.price.fetchedAt ?? undefined);
+  const stale = !!data && [data.price, data.timeframes["15m"], data.timeframes["1h"], data.timeframes["4h"], data.daily].some(resource => resource?.stale);
   return (
     <Panel title="マルチタイムフレーム分析" eyebrow="MULTI-TIMEFRAME" className="reasons-panel mtf-panel" testId="multi-timeframe" ariaLabel="マルチタイムフレーム分析">
       {!data && !error && <p className="footnote">取得中…</p>}
       {error && <p role="status" className="footnote negative">{error}</p>}
+      {stale && <p role="status" className="footnote neutral">STALE · 古い時間足は分析対象から除外しています。</p>}
       {analysis && (
         <>
           <dl className="mtf-summary">

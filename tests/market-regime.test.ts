@@ -472,6 +472,15 @@ test("AT no polling", () => {
   assert.equal(MARKET_DASHBOARD_REFRESH_MS, 60_000);
 });
 
+test("stale 1h resource is unavailable to regime analysis", () => {
+  const market = marketFrom("USD/JPY", series(240));
+  market.timeframes["1h"].stale = true;
+  const result = marketRegimeForPair(market, "USD/JPY", iso())!;
+  assert.equal(result.regime, "unavailable");
+  assert.equal(result.evidence.dataPoints, 0);
+  assert.match(SOURCE, /古い1時間足は分析対象から除外しています/);
+});
+
 test("AU no migration", () => {
   assert.doesNotMatch(SOURCE, /migration|alter table|create table/i);
   assert.equal(existsSync(join(ROOT, "supabase/migrations")), true);

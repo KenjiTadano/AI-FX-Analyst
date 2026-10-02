@@ -1,6 +1,7 @@
 import { factorCategories, type AIErrorCode, type AnalysisFactor, type AnalysisInput, type ModelInterpretation } from "./types";
 import { entryTriggerSchema, sanitizeStructuredEntryTrigger } from "./entry-trigger";
 import { classifyProviderHttp, retryAfterSeconds, type AiTransport } from "./provider";
+import { recordApiFailure, recordApiUsage } from "../api-usage";
 
 export class AnalysisError extends Error {
   constructor(public code: AIErrorCode, public detail?: string) {
@@ -237,14 +238,20 @@ export function createOpenAICaller(config: OpenAICallerConfig, fetcher: typeof f
       };
     let response: Response;
     try {
+      recordApiUsage(provider === "openrouter" ? "OpenRouter" : "OpenAI", "request");
+      recordApiUsage(provider === "openrouter" ? "OpenRouter" : "OpenAI", "call");
       response = await fetcher(url, {
         method: "POST", headers: { Authorization: `Bearer ${config.apiKey}`, "Content-Type": "application/json" },
         cache: "no-store", redirect: "error", signal: AbortSignal.timeout(config.timeoutMs ?? 25_000),
         body: JSON.stringify(body),
       });
-    } catch (error) { throw new AnalysisError(error instanceof Error && ["TimeoutError", "AbortError"].includes(error.name) ? "timeout" : "api_error"); }
+    } catch (error) {
+      recordApiFailure(provider === "openrouter" ? "OpenRouter" : "OpenAI", error instanceof Error && ["TimeoutError", "AbortError"].includes(error.name) ? "timeout" : "providerError");
+      throw new AnalysisError(error instanceof Error && ["TimeoutError", "AbortError"].includes(error.name) ? "timeout" : "api_error");
+    }
     if (!response.ok) {
       const classified = classifyProviderHttp(response.status);
+      recordApiFailure(provider === "openrouter" ? "OpenRouter" : "OpenAI", classified.code === "rate_limited" ? "rateLimited" : "providerError");
       const retryAfter = retryAfterSeconds(response.headers.get("retry-after"));
       const detail = retryAfter == null ? classified.detail : `${classified.detail}:retry_after_${retryAfter}`;
       throw new AnalysisError(classified.code === "timeout" ? "timeout" : classified.code, detail);
@@ -258,13 +265,16 @@ export function createOpenAICaller(config: OpenAICallerConfig, fetcher: typeof f
       let parsed: unknown;
       try { parsed = JSON.parse(stripFence(text)); }
       catch { throw new AnalysisError("invalid_response", "json_parse_failed"); }
-      return {
+      const result = {
         interpretation: validateInterpretation(parsed, input),
         actualModel,
         latencyMs: Math.max(0, Date.now() - started),
         requestedModel: config.model,
       };
+      recordApiUsage(provider === "openrouter" ? "OpenRouter" : "OpenAI", "success");
+      return result;
     } catch (error) {
+      recordApiFailure(provider === "openrouter" ? "OpenRouter" : "OpenAI");
       if (error instanceof AnalysisError) {
         if (error.code === "invalid_response" && error.detail && shouldExposeValidationDetail()) {
           // Safe diagnostics only: field-level reason codes, never prompts/keys/images.

@@ -6,6 +6,7 @@ import { aiMessage, finalizeAnalysis } from "../lib/ai/engine";
 import { resolveChartProvider, resolveTextProvider } from "../lib/ai/provider";
 import { buildInput } from "../lib/ai/input";
 import { interpretationSchema } from "../lib/ai/openai";
+import { getApiUsageSnapshot } from "../lib/api-usage";
 
 const now = Date.parse("2026-09-21T00:00:00.000Z");
 const input = () => buildInput("USD/JPY", null, null, now);
@@ -64,6 +65,20 @@ async function interpretWithFallback(openrouterResponse: () => Response | Promis
   const result = await interpret(input());
   return { result, urls };
 }
+
+test("AI usage counters distinguish OpenRouter failure and one OpenAI fallback", async () => {
+  const before = getApiUsageSnapshot();
+  const { result, urls } = await interpretWithFallback(() => new Response("limited", { status: 429, headers: { "retry-after": "12" } }));
+  const after = getApiUsageSnapshot();
+  assert.equal(urls.length, 2);
+  assert.equal(result.meta.fallbackUsed, true);
+  assert.equal(after.providers.OpenRouter.requests - before.providers.OpenRouter.requests, 1);
+  assert.equal(after.providers.OpenRouter.calls - before.providers.OpenRouter.calls, 1);
+  assert.equal(after.providers.OpenRouter.rateLimited - before.providers.OpenRouter.rateLimited, 1);
+  assert.equal(after.providers.OpenRouter.fallbacks - before.providers.OpenRouter.fallbacks, 1);
+  assert.equal(after.providers.OpenAI.requests - before.providers.OpenAI.requests, 1);
+  assert.equal(after.providers.OpenAI.calls - before.providers.OpenAI.calls, 1);
+});
 
 test("OpenRouter free requested model is env-driven and never hardcodes Gemini", () => {
   const config = resolveTextProvider({

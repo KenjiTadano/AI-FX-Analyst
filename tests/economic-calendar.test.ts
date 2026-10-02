@@ -87,9 +87,11 @@ test("cache deduplicates and refreshes at release then throttles post-release", 
   let clock = now, calls = 0;
   const provider = createTradingEconomics("synthetic-key", async () => { calls++; return Response.json([{ ...raw, Date: iso(now + 1000) }]); }, () => clock, new ResourceCache(() => clock));
   await Promise.all([provider.calendar(), provider.calendar()]); assert.equal(calls, 1);
-  clock += 1000; await provider.calendar(); assert.equal(calls, 2);
+  clock += 1000; const atRelease = await provider.calendar(); assert.equal(atRelease.stale, true);
+  await new Promise<void>(resolve => setImmediate(resolve)); assert.equal(calls, 2);
   clock += 59000; await provider.calendar(); assert.equal(calls, 2);
-  clock += 1000; await provider.calendar(); assert.equal(calls, 3);
+  clock += 1000; const afterRelease = await provider.calendar(); assert.equal(afterRelease.stale, true);
+  await new Promise<void>(resolve => setImmediate(resolve)); assert.equal(calls, 3);
 });
 test("unconfigured provider performs no requests", async () => {
   let calls = 0; const p = createTradingEconomics("", async () => { calls++; return Response.json([]); });

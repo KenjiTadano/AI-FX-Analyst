@@ -487,15 +487,29 @@ test("AZ no Supabase", () => {
   assert.doesNotMatch(CLIENT, /supabase/i);
 });
 
-test("BA cache key pair+timeframe", () => {
-  assert.match(CLIENT, /\$\{symbol\}:\$\{frame\}/);
+test("BA cache key isolates endpoint and all request parameters", () => {
+  assert.match(CLIENT, /function requestKey\(endpoint: string, params: Record<string, string>\)/);
+  assert.match(CLIENT, /const id = requestKey\(endpoint, params\)/);
+  assert.match(CLIENT, /Object\.entries\(params\)\.sort/);
   assert.match(CLIENT, /1day/);
   assert.match(CLIENT, /outputsize: "300"/);
 });
 
+test("stale timeframe resources are excluded without changing MTF calculations", () => {
+  const market = marketFrom("USD/JPY", { day: 1, h4: 1, h1: 1, m15: 1 });
+  market.timeframes["1h"].stale = true;
+  const analysis = multiTimeframeForPair(market, "USD/JPY", iso())!;
+  assert.equal(frame(analysis, "1h").trend, "unavailable");
+  assert.equal(frame(analysis, "15m").trend, "bullish");
+  assert.match(SOURCE, /古い時間足は分析対象から除外しています/);
+});
+
 test("BB cache hit / BC cache miss documented by existing market.mjs", () => {
   assert.match(CLIENT, /if \(prior && prior.expires > Date.now\(\)\)/);
-  assert.equal(MARKET_SERIES_TTL_SECONDS, 300);
+  assert.equal(MARKET_SERIES_TTL_SECONDS["15m"], 300);
+  assert.equal(MARKET_SERIES_TTL_SECONDS["1h"], 900);
+  assert.equal(MARKET_SERIES_TTL_SECONDS["4h"], 1800);
+  assert.equal(MARKET_SERIES_TTL_SECONDS["1day"], 21_600);
 });
 
 test("BD timeframe failure isolated", () => {

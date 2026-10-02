@@ -3,6 +3,7 @@ import { ProviderError } from "../../fundamental/resource";
 import type { EconomicCalendarProvider } from "../provider";
 import { normalizeFinanceCalendar } from "../finance-calendar-normalize";
 import { calendarTtl } from "../risk-window";
+import { recordApiFailure, recordApiUsage } from "../../api-usage";
 
 export const FINANCE_CALENDAR_URL = "https://www.financecalendar.com/wp-json/fc/v1/calendar";
 export const FINANCE_CALENDAR_SITE = "https://www.financecalendar.com";
@@ -23,20 +24,23 @@ export function createFinanceCalendar(options: {
       return cache.get("finance-calendar", calendarTtl, "FinanceCalendar", async () => {
         let response: Response;
         try {
+          recordApiUsage("FinanceCalendar", "request");
           response = await fetcher(url, {
             cache: "no-store",
             redirect: "error",
             signal: AbortSignal.timeout(10_000),
             headers: { Accept: "application/json" },
           });
-        } catch {
+        } catch (error) {
+          recordApiFailure("FinanceCalendar", error instanceof Error && ["TimeoutError", "AbortError"].includes(error.name) ? "timeout" : "providerError");
           throw new ProviderError("network");
         }
-        if (response.status === 429) throw new ProviderError("rate_limited");
-        if (!response.ok) throw new ProviderError("network");
+        if (response.status === 429) { recordApiFailure("FinanceCalendar", true); throw new ProviderError("rate_limited"); }
+        if (!response.ok) { recordApiFailure("FinanceCalendar"); throw new ProviderError("network"); }
         try {
           return normalizeFinanceCalendar(await response.json(), now());
         } catch {
+          recordApiFailure("FinanceCalendar");
           throw new ProviderError("invalid_response");
         }
       });

@@ -5,6 +5,7 @@ import { createFinnhub } from "../lib/fundamental/providers/finnhub";
 import { ResourceCache } from "../lib/fundamental/cache";
 import { ProviderError } from "../lib/fundamental/resource";
 import { assembleFundamentals } from "../lib/fundamental/service";
+import { buildInput } from "../lib/ai/input";
 import { getCentralBanks } from "../lib/fundamental/central-banks";
 import { getSentiment } from "../lib/fundamental/sentiment";
 import { relatedCurrencies, classifyImportance } from "../lib/fundamental/classification";
@@ -64,12 +65,18 @@ test("does not invent timezone, actual readings, or released state", () => {
   assert.equal(eventStatus({ actual: null, scheduledAt: "2026-09-08T01:00:00Z" }, now), "upcoming");
 });
 test("normalizes country mapping and excludes unrelated economies", () => {
-  const rows = ["US", "JP", "EU", "GB", "DE", "AU"].map(country => ({ ...event, country }));
-  assert.deepEqual(normalizeCalendar({ economicCalendar: rows }, now).items.map(item => item.currency), ["USD", "JPY", "EUR", "GBP", "EUR"]);
+  const rows = ["US", "JP", "EU", "GB", "DE", "AU"].map((country) => ({ ...event, country }));
+  assert.deepEqual(
+    normalizeCalendar({ economicCalendar: rows }, now).items.map((item) => item.currency),
+    ["USD", "JPY", "EUR", "GBP", "EUR"],
+  );
 });
 test("missing keys / disabled calendar make zero external requests", async () => {
   let calls = 0;
-  const fetcher: typeof fetch = async () => { calls++; throw new Error("should not fetch"); };
+  const fetcher: typeof fetch = async () => {
+    calls++;
+    throw new Error("should not fetch");
+  };
   const api = createFinnhub({ ...config, apiKey: "", calendarEnabled: false }, fetcher);
   assert.equal((await api.news()).error?.code, "not_configured");
   assert.equal((await api.calendar()).error?.code, "disabled");
@@ -92,10 +99,18 @@ test("uses header auth, shared normalized caches, and bounded timeout", async ()
   assert.equal((await api.news()).status, "ok");
   assert.equal(calls, 1);
 });
-for (const [http, code] of [[401, "unauthorized"], [403, "forbidden"], [429, "rate_limited"], [500, "network"]] as const) {
+for (const [http, code] of [
+  [401, "unauthorized"],
+  [403, "forbidden"],
+  [429, "rate_limited"],
+  [500, "network"],
+] as const) {
   test(`HTTP ${http} is isolated, sanitized and cached`, async () => {
     let calls = 0;
-    const api = createFinnhub(config, async () => { calls++; return Response.json({ error: config.apiKey }, { status: http }); });
+    const api = createFinnhub(config, async () => {
+      calls++;
+      return Response.json({ error: config.apiKey }, { status: http });
+    });
     const result = await api.news();
     assert.equal(result.error?.code, code);
     assert.equal(result.data, null);
@@ -105,7 +120,13 @@ for (const [http, code] of [[401, "unauthorized"], [403, "forbidden"], [429, "ra
   });
 }
 test("invalid JSON, HTTP 200 errors and network exceptions never become successful empty feeds", async () => {
-  const fetchers: (typeof fetch)[] = [async () => new Response("not-json"), async () => Response.json({ error: "private-token" }), async () => { throw new Error("private-token"); }];
+  const fetchers: (typeof fetch)[] = [
+    async () => new Response("not-json"),
+    async () => Response.json({ error: "private-token" }),
+    async () => {
+      throw new Error("private-token");
+    },
+  ];
   for (const fetcher of fetchers) {
     const result = await createFinnhub(config, fetcher).news();
     assert.equal(result.status, "error");
@@ -114,7 +135,7 @@ test("invalid JSON, HTTP 200 errors and network exceptions never become successf
   }
 });
 test("calendar provider sends bounded dates and normalizes successful data", async () => {
-  const api = createFinnhub(config, async input => {
+  const api = createFinnhub(config, async (input) => {
     const url = new URL(String(input));
     assert.equal(url.pathname, "/api/v1/calendar/economic");
     assert.equal(Date.parse(url.searchParams.get("to")!) - Date.parse(url.searchParams.get("from")!), 8 * 86_400_000);
@@ -122,22 +143,43 @@ test("calendar provider sends bounded dates and normalizes successful data", asy
   });
   assert.equal((await api.calendar()).data?.[0].forecast, 2.8);
 });
-test("cache expires, suppresses failure retries and recovers without serving stale data", async () => {
-  let time = now, calls = 0;
+test("cache expires, serves stale data on failure and recovers after failure TTL", async () => {
+  let time = now,
+    calls = 0;
   const cache = new ResourceCache(() => time);
-  const loader = async () => { calls++; return { items: [1], warnings: [] }; };
+  const loader = async () => {
+    calls++;
+    return { items: [1], warnings: [] };
+  };
   await cache.get("a", 1000, "test", loader);
   time += 999;
   await cache.get("a", 1000, "test", loader);
   assert.equal(calls, 1);
   time++;
-  const failed = await cache.get("a", 1000, "test", async () => { throw new ProviderError("network"); });
-  assert.equal(failed.data, null);
-  assert.equal(failed.fetchedAt, null);
+  const refreshing = await cache.get("a", 1000, "test", async () => {
+    throw new ProviderError("network");
+  });
+  assert.deepEqual(refreshing.data, [1]);
+  assert.equal(refreshing.status, "ok");
+  assert.equal(refreshing.stale, true);
+  assert.equal(refreshing.fetchedAt, new Date(now).toISOString());
+  await new Promise<void>(resolve => setImmediate(resolve));
+  const failed = await cache.get("a", 1000, "test", loader);
+  assert.deepEqual(failed.data, [1]);
+  assert.equal(failed.status, "error");
+  assert.equal(failed.stale, true);
   time += 59_999;
-  assert.equal((await cache.get("a", 1000, "test", loader)).status, "error");
+  const suppressed = await cache.get("a", 1000, "test", loader);
+  assert.deepEqual(suppressed.data, [1]);
+  assert.equal(suppressed.stale, true);
+  assert.equal(calls, 1);
   time++;
-  assert.equal((await cache.get("a", 1000, "test", loader)).status, "ok");
+  const recovering = await cache.get("a", 1000, "test", loader);
+  assert.equal(recovering.stale, true);
+  await new Promise<void>(resolve => setImmediate(resolve));
+  const recovered = await cache.get("a", 1000, "test", loader);
+  assert.equal(recovered.status, "ok");
+  assert.equal(recovered.stale, false);
   assert.equal(calls, 2);
 });
 test("each pair receives only relevant currencies and excludes old/future news", async () => {
@@ -148,14 +190,21 @@ test("each pair receives only relevant currencies and excludes old/future news",
   for (const pair of ["USD/JPY", "EUR/JPY", "GBP/JPY"] as const) {
     const result = await assembleFundamentals(pair, source, now);
     assert.equal(result.news.data?.length, 2);
-    assert.deepEqual(result.factors.map(item => item.currency), pair.split("/"));
-    assert.ok(result.factors.every(item => item.impactDirection === null));
+    assert.deepEqual(
+      result.factors.map((item) => item.currency),
+      pair.split("/"),
+    );
+    assert.ok(result.factors.every((item) => item.impactDirection === null));
   }
 });
 test("failure of one provider does not break other materials; synchronous throws also isolated", async () => {
   const source = providers([], normalizeCalendar({ economicCalendar: [event] }, now, true).items);
-  source.news = () => { throw new Error("private-token"); };
-  source.sentiment = async () => { throw new Error("down"); };
+  source.news = () => {
+    throw new Error("private-token");
+  };
+  source.sentiment = async () => {
+    throw new Error("down");
+  };
   const result = await assembleFundamentals("USD/JPY", source, now);
   assert.equal(result.news.status, "error");
   assert.equal(result.calendar.data?.length, 1);
@@ -168,12 +217,27 @@ test("re-evaluates release state after a cached scheduled time passes", async ()
   const data = await assembleFundamentals("USD/JPY", source, now + 13 * 60 * 60_000);
   assert.equal(data.calendar.data?.[0].status, "awaiting_actual");
 });
+test("stale news and calendar stay visible but are excluded from AI input", async () => {
+  const news = normalizeNews([{ ...article, headline: "Fed policy decision" }]).items;
+  const events = normalizeCalendar({ economicCalendar: [event] }, now, true).items;
+  const data = await assembleFundamentals("USD/JPY", providers(news, events), now);
+  data.news.stale = true;
+  data.calendar.stale = true;
+  data.macroeconomic = {
+    data: [{ value: 2.8, observationDate: "2026-08-01" } as never],
+    status: "ok", provider: "FRED", fetchedAt: new Date(now).toISOString(), stale: true, error: null, warnings: [],
+  };
+  const input = buildInput("USD/JPY", null, data, now);
+  assert.equal(input.eventRisk.known, false);
+  assert.equal(input.dataAvailability.macroeconomicData.status, "missing");
+  assert.equal(input.fundamentalData.some(item => item.id.startsWith("news:") || item.id.startsWith("economic:") || item.id.startsWith("macro:")), false);
+});
 test("central bank rates stay unavailable and sentiment is not fabricated as neutral", async () => {
   const data = await assembleFundamentals("EUR/JPY", providers(), now);
   assert.equal(data.centralBanks.data?.[0].abbreviation, "ECB");
-  assert.ok(data.centralBanks.data?.every(bank => bank.policyRate.value === null && bank.policyDirection.value === null));
+  assert.ok(data.centralBanks.data?.every((bank) => bank.policyRate.value === null && bank.policyDirection.value === null));
   assert.equal(data.sentiment.data?.market.value, null);
-  assert.ok(data.sentiment.data?.currencies.every(currency => currency.sentiment.value === null));
+  assert.ok(data.sentiment.data?.currencies.every((currency) => currency.sentiment.value === null));
 });
 test("existing Task003 technical calculation still handles a known uptrend", () => {
   const candles = Array.from({ length: 220 }, (_, i) => ({ time: new Date(now + i * 60_000).toISOString(), open: 100 + i, high: 102 + i, low: 99 + i, close: 101 + i }));
@@ -198,7 +262,9 @@ test("links a confirmed future bank meeting but never interprets its forecast as
   assert.equal(bank.policyRate.value, null);
 });
 test("an aborted provider request becomes a retryable network error", async () => {
-  const api = createFinnhub(config, async () => { throw new DOMException("test timeout", "TimeoutError"); });
+  const api = createFinnhub(config, async () => {
+    throw new DOMException("test timeout", "TimeoutError");
+  });
   const result = await api.news();
   assert.equal(result.error?.code, "network");
   assert.equal(result.data, null);

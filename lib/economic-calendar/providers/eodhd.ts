@@ -4,6 +4,7 @@ import type { EconomicEvent } from "../../fundamental/types";
 import type { EconomicCalendarProvider } from "../provider";
 import { normalizeEodhd } from "../eodhd-normalize";
 import { calendarTtl } from "../risk-window";
+import { recordApiFailure, recordApiUsage } from "../../api-usage";
 
 export const EODHD_COUNTRIES = { USD: "US", JPY: "JP", GBP: "GB" } as const;
 export type EodhdErrorLog = { provider: "EODHD"; country: string; httpStatus: number | null; code: string };
@@ -22,10 +23,10 @@ export function createEodhd(apiToken: string, options: { fetcher?: typeof fetch;
         const url = new URL("https://eodhd.com/api/economic-events");
         url.searchParams.set("api_token", apiToken); url.searchParams.set("from", from); url.searchParams.set("to", to); url.searchParams.set("country", country); url.searchParams.set("fmt", "json");
         let response: Response;
-        try { response = await fetcher(url.toString(), { cache: "no-store", redirect: "error", signal: AbortSignal.timeout(10_000) }); } catch { options.onError?.({ provider: "EODHD", country, httpStatus: null, code: "network" }); throw new ProviderError("network"); }
+        try { recordApiUsage("EODHD", "request"); response = await fetcher(url.toString(), { cache: "no-store", redirect: "error", signal: AbortSignal.timeout(10_000) }); } catch (error) { recordApiFailure("EODHD", error instanceof Error && ["TimeoutError", "AbortError"].includes(error.name) ? "timeout" : "providerError"); options.onError?.({ provider: "EODHD", country, httpStatus: null, code: "network" }); throw new ProviderError("network"); }
         const code = response.status === 401 ? "unauthorized" : response.status === 403 ? "forbidden" : response.status === 429 ? "rate_limited" : response.status >= 500 ? "network" : !response.ok ? "network" : null;
-        if (code) { options.onError?.({ provider: "EODHD", country, httpStatus: response.status, code }); throw new ProviderError(code as "unauthorized" | "forbidden" | "rate_limited" | "network"); }
-        try { return normalizeEodhd(await response.json(), now(), options.assumeUtc ?? true).items; } catch { options.onError?.({ provider: "EODHD", country, httpStatus: response.status, code: "invalid_response" }); throw new ProviderError("invalid_response"); }
+        if (code) { recordApiFailure("EODHD", code === "rate_limited"); options.onError?.({ provider: "EODHD", country, httpStatus: response.status, code }); throw new ProviderError(code as "unauthorized" | "forbidden" | "rate_limited" | "network"); }
+        try { return normalizeEodhd(await response.json(), now(), options.assumeUtc ?? true).items; } catch { recordApiFailure("EODHD"); options.onError?.({ provider: "EODHD", country, httpStatus: response.status, code: "invalid_response" }); throw new ProviderError("invalid_response"); }
       }));
       return { items: batches.flat(), warnings: euroCountry === "EU" ? ["EODHDのEuro Areaコードは契約レスポンスで確認できるまでEUとして設定しています。"] : [] };
     });

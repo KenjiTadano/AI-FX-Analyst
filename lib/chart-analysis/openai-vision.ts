@@ -1,5 +1,6 @@
 import type { Symbol } from "../market/types";
-import { classifyProviderHttp, retryAfterSeconds } from "../ai/provider";
+import { classifyProviderHttp, retryAfterSeconds, type AiProviderName } from "../ai/provider";
+import { recordApiFailure, recordApiUsage } from "../api-usage";
 import { normalizeChartAnalysis } from "./normalize";
 import type { AllowedChartMime, ChartAnalysisErrorCode, ChartImageAnalysis } from "./types";
 
@@ -112,9 +113,11 @@ export function createChartVision(config: {
   url?: string;
   transport?: "responses" | "chat";
   imageCapable?: boolean;
+  provider?: AiProviderName;
 }, fetcher: typeof fetch = fetch) {
   const url = config.url ?? "https://api.openai.com/v1/responses";
   const transport = config.transport ?? "responses";
+  const provider = config.provider === "openrouter" ? "OpenRouter" : "OpenAI";
   return async (input: { pair: Symbol; mime: AllowedChartMime; base64: string }): Promise<ChartImageAnalysis> => {
     if (!config.apiKey || !config.model) throw new ChartVisionError("not_configured");
     if (config.imageCapable === false) throw new ChartVisionError("openai_unavailable");
@@ -146,6 +149,8 @@ export function createChartVision(config: {
       };
     let response: Response;
     try {
+      recordApiUsage(provider, "request");
+      recordApiUsage(provider, "call");
       response = await fetcher(url, {
         method: "POST",
         headers: { Authorization: `Bearer ${config.apiKey}`, "Content-Type": "application/json" },
@@ -155,10 +160,12 @@ export function createChartVision(config: {
         body: JSON.stringify(body),
       });
     } catch (error) {
+      recordApiFailure(provider, error instanceof Error && ["TimeoutError", "AbortError"].includes(error.name) ? "timeout" : "providerError");
       throw new ChartVisionError(error instanceof Error && ["TimeoutError", "AbortError"].includes(error.name) ? "openai_timeout" : "openai_unavailable");
     }
     if (!response.ok) {
       const classified = classifyProviderHttp(response.status);
+      recordApiFailure(provider, classified.code === "rate_limited" ? "rateLimited" : "providerError");
       const retryAfter = retryAfterSeconds(response.headers.get("retry-after"));
       const detail = retryAfter == null ? classified.detail : `${classified.detail}:retry_after_${retryAfter}`;
       throw new ChartVisionError(
@@ -170,8 +177,11 @@ export function createChartVision(config: {
       const payload: unknown = await response.json();
       const text = chartModelText(payload);
       if (!text || text.length > 25_000) throw new ChartVisionError("invalid_ai_response");
-      return normalizeChartAnalysis(JSON.parse(text), input.pair, config.model);
+      const analysis = normalizeChartAnalysis(JSON.parse(text), input.pair, config.model);
+      recordApiUsage(provider, "success");
+      return analysis;
     } catch (error) {
+      recordApiFailure(provider);
       if (error instanceof ChartVisionError) throw error;
       throw new ChartVisionError("invalid_ai_response");
     }

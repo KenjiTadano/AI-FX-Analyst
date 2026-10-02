@@ -1,4 +1,5 @@
 import "server-only";
+import { recordApiUsage } from "../api-usage";
 import { calculateIndicators } from "./indicators";
 import {
   MARKET_FAILURE_TTL_SECONDS,
@@ -18,6 +19,7 @@ const cache = new Map<string, { value: Resource<unknown>; expires: number }>();
 const pending = new Map<string, Promise<Resource<unknown>>>();
 let calls: number[] = [];
 let blockedUntil = 0;
+let dailyBlockedUntil = 0;
 let day = "";
 let dailyCalls = 0;
 const number = (value: unknown): number => {
@@ -25,35 +27,85 @@ const number = (value: unknown): number => {
   return Number(value);
 };
 
-async function resource<T>(id: string, endpoint: string, params: Record<string, string>, ttl: number, normalize: (body: Record<string, unknown>) => T): Promise<Resource<T>> {
+function requestKey(endpoint: string, params: Record<string, string>): string {
+  const sorted = Object.entries(params).sort(([a], [b]) => a.localeCompare(b));
+  return `${endpoint}:${new URLSearchParams(sorted).toString()}`;
+}
+
+function nextUtcDay(now: number): number {
+  const date = new Date(now);
+  return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate() + 1);
+}
+
+function retryDelayMs(value: string | null, now: number): number | null {
+  if (!value) return null;
+  const seconds = Number(value);
+  if (Number.isFinite(seconds) && seconds >= 0 && seconds <= 86_400) return seconds * 1000;
+  const at = Date.parse(value);
+  return Number.isFinite(at) && at > now && at - now <= 86_400_000 ? at - now : null;
+}
+
+async function resource<T>(endpoint: string, params: Record<string, string>, ttl: number, normalize: (body: Record<string, unknown>) => T): Promise<Resource<T>> {
+  const id = requestKey(endpoint, params);
   const apiKey = process.env.TWELVE_DATA_API_KEY?.trim();
   if (!apiKey) return { data: null, fetchedAt: null, stale: false, error: "TWELVE_DATA_API_KEY が未設定です。設定後にサーバーを再起動してください。" };
   const prior = cache.get(id);
-  if (prior && prior.expires > Date.now()) return prior.value as Resource<T>;
-  if (pending.has(id)) return pending.get(id)! as Promise<Resource<T>>;
+  const priorValue = prior?.value as Resource<T> | undefined;
+  const lastGood = priorValue?.data !== null && priorValue?.data !== undefined ? priorValue : null;
+  if (prior && prior.expires > Date.now()) { recordApiUsage("Twelve Data", "cacheHit"); return priorValue!; }
+  if (pending.has(id)) {
+    recordApiUsage("Twelve Data", "inFlightDedupe");
+    return lastGood ? { ...lastGood, stale: true } : pending.get(id)! as Promise<Resource<T>>;
+  }
+  recordApiUsage("Twelve Data", "cacheMiss");
   const task = (async (): Promise<Resource<T>> => {
+    let failureKind: "rateLimited" | "dailyQuota" | "providerError" = "providerError";
     try {
       const now = Date.now();
       const today = new Date(now).toISOString().slice(0, 10);
-      if (day !== today) { day = today; dailyCalls = 0; }
+      if (day !== today) { day = today; dailyCalls = 0; dailyBlockedUntil = 0; }
       calls = calls.filter(at => now - at < 60000);
-      if (now < blockedUntil || calls.length >= 8 || dailyCalls >= 800) throw new Error("API利用上限に達しました。時間をおいて自動再試行します（日次上限はUTC 0時にリセット）。");
+      if (now < blockedUntil) {
+        failureKind = now < dailyBlockedUntil ? "dailyQuota" : "rateLimited";
+        throw new Error(failureKind === "dailyQuota" ? "API日次利用上限に達しました。UTC 0時以降に再試行します。" : "API利用上限に達しました。時間をおいて再試行します。");
+      }
+      if (calls.length >= 8) {
+        failureKind = "rateLimited";
+        throw new Error("API利用上限に達しました。時間をおいて再試行します。");
+      }
+      if (dailyCalls >= 800) {
+        blockedUntil = nextUtcDay(now);
+        dailyBlockedUntil = blockedUntil;
+        failureKind = "dailyQuota";
+        throw new Error("API日次利用上限に達しました。UTC 0時以降に再試行します。");
+      }
       calls.push(now); dailyCalls++;
       const url = new URL(`https://api.twelvedata.com/${endpoint}`);
       url.search = new URLSearchParams(params).toString();
       // Keep the key out of URLs and logs. Bound caching here to validated successes;
       // provider errors may arrive with HTTP 200 and must not enter a long-lived cache.
+      recordApiUsage("Twelve Data", "request");
       const response = await fetch(url, { headers: { Authorization: `apikey ${apiKey}` }, cache: "no-store", signal: AbortSignal.timeout(12000) });
       const body = await response.json();
       if (response.status === 429 || body?.code === 429) {
-        blockedUntil = Date.now() + 60000;
-        throw new Error("Twelve Dataの利用上限に達しました。1分後に再試行します。日次上限の場合はUTC 0時までお待ちください。");
+        const dailyQuota = typeof body?.message === "string" && /daily|per day|day limit/i.test(body.message);
+        const retryDelay = retryDelayMs(response.headers?.get?.("retry-after") ?? null, Date.now());
+        blockedUntil = dailyQuota ? nextUtcDay(Date.now()) : Date.now() + (retryDelay ?? 60_000);
+        dailyBlockedUntil = dailyQuota ? blockedUntil : 0;
+        failureKind = dailyQuota ? "dailyQuota" : "rateLimited";
+        throw new Error(dailyQuota ? "API日次利用上限に達しました。UTC 0時以降に再試行します。" : "Twelve Dataの利用上限に達しました。時間をおいて再試行します。");
       }
       if (!response.ok || !body || body.status === "error") throw new Error(response.status === 401 || body?.code === 401 ? "APIキーが無効です。設定を確認してください。" : "Twelve Dataから取得できませんでした。キーの権限・契約プランをご確認ください。");
       const value: Resource<T> = { data: normalize(body), fetchedAt: new Date().toISOString(), stale: false, error: null };
       cache.set(id, { value, expires: Date.now() + ttl * 1000 });
+      recordApiUsage("Twelve Data", "success");
       return value;
     } catch (error) {
+      recordApiUsage("Twelve Data", "error");
+      if (failureKind === "dailyQuota") recordApiUsage("Twelve Data", "dailyQuota");
+      else if (failureKind === "rateLimited") recordApiUsage("Twelve Data", "rateLimited");
+      else if (error instanceof Error && ["TimeoutError", "AbortError"].includes(error.name)) recordApiUsage("Twelve Data", "timeout");
+      else recordApiUsage("Twelve Data", "providerError");
       // Never forward upstream exceptions: they may contain request credentials.
       const safeMessages = ["API利用上限", "Twelve Data", "APIキー", "市場データ"];
       const message = error instanceof Error && safeMessages.some(prefix => error.message.startsWith(prefix)) ? error.message : "市場データの通信に失敗しました。自動再試行します。";
@@ -63,6 +115,10 @@ async function resource<T>(id: string, endpoint: string, params: Record<string, 
     }
   })();
   pending.set(id, task);
+  if (lastGood) {
+    void task.then(() => pending.delete(id), () => pending.delete(id));
+    return { ...lastGood, stale: true };
+  }
   try { return await task; } finally { pending.delete(id); }
 }
 
@@ -82,17 +138,16 @@ function normalizeSeries(body: Record<string, unknown>, durationMs: number): Tec
 
 function series(symbol: Symbol, frame: keyof typeof intervals) {
   return resource(
-    `${symbol}:${frame}`,
     "time_series",
     { symbol, interval: intervals[frame], outputsize: "300", timezone: "UTC", order: "asc" },
-    MARKET_SERIES_TTL_SECONDS,
+    MARKET_SERIES_TTL_SECONDS[frame],
     body => normalizeSeries(body, durations[frame]),
   );
 }
 
 export async function getMarketData(symbol: Symbol): Promise<MarketData> {
   const [price, m15, h1, h4, daily] = await Promise.all([
-    resource(`${symbol}:price`, "price", { symbol }, MARKET_PRICE_TTL_SECONDS, body => number(body.price)),
+    resource("price", { symbol }, MARKET_PRICE_TTL_SECONDS, body => number(body.price)),
     series(symbol, "15m"),
     series(symbol, "1h"),
     series(symbol, "4h"),

@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { canPoll, scheduleVisibleRefresh } from "@/lib/client/polling";
+import { MARKET_DASHBOARD_REFRESH_MS } from "@/lib/market/types";
 import type { DataResource, FundamentalData, Importance, NewsItem } from "@/lib/fundamental/types";
 import { EconomicCalendar } from "./economic-calendar";
 import { UsMacroPanel } from "./us-macro";
@@ -16,8 +18,10 @@ export function useFundamentals(symbol: string) {
   useEffect(() => {
     const controller = new AbortController();
     let timer: ReturnType<typeof setTimeout>;
+    let inFlight = false;
     async function refresh() {
-      if (document.visibilityState === "hidden") { timer = setTimeout(refresh, 60_000); return; }
+      if (!canPoll(document.visibilityState) || inFlight) return;
+      inFlight = true;
       try {
         const response = await fetch(`/api/fundamental?symbol=${encodeURIComponent(symbol)}`, { signal: AbortSignal.any([controller.signal, AbortSignal.timeout(25_000)]), cache: "no-store" });
         if (!response.ok) throw new Error("request_failed");
@@ -25,13 +29,23 @@ export function useFundamentals(symbol: string) {
         if (data.symbol !== symbol || data.schemaVersion !== 1) throw new Error("invalid_response");
         if (!controller.signal.aborted) setResult({ symbol, data, error: null });
       } catch {
-        if (!controller.signal.aborted) setResult({ symbol, data: null, error: "現在マーケット材料を取得できません。自動再試行します。" });
+        if (!controller.signal.aborted) setResult(current => {
+          if (current?.symbol !== symbol || !current.data) return { symbol, data: null, error: "現在マーケット材料を取得できません。自動再試行します。" };
+          const stale = <T,>(resource: DataResource<T>) => resource.data === null ? resource : { ...resource, status: "error" as const, stale: true, error: { code: "network" as const, message: "マーケット材料を再取得できません。" } };
+          return { symbol, data: { ...current.data, news: stale(current.data.news), calendar: stale(current.data.calendar), macroeconomic: stale(current.data.macroeconomic), centralBanks: stale(current.data.centralBanks), sentiment: stale(current.data.sentiment) }, error: "現在マーケット材料を取得できません。自動再試行します。" };
+        });
       } finally {
-        if (!controller.signal.aborted) timer = setTimeout(refresh, 60_000);
+        inFlight = false;
+        if (!controller.signal.aborted && canPoll(document.visibilityState)) timer = setTimeout(() => void refresh(), MARKET_DASHBOARD_REFRESH_MS);
       }
     }
-    void refresh();
-    return () => { controller.abort(); clearTimeout(timer); };
+    function onVisibilityChange() {
+      clearTimeout(timer);
+      if (canPoll(document.visibilityState)) timer = scheduleVisibleRefresh(() => void refresh());
+    }
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    if (canPoll(document.visibilityState)) void refresh();
+    return () => { controller.abort(); clearTimeout(timer); document.removeEventListener("visibilitychange", onVisibilityChange); };
   }, [symbol]);
   return result?.symbol === symbol ? result : null;
 }
@@ -39,6 +53,7 @@ export function useFundamentals(symbol: string) {
 function ResourceNote({ resource, label, error }: { resource?: DataResource<unknown>; label: string; error?: string | null }) {
   if (error) return <p className="material-empty" role="status">{error}</p>;
   if (!resource) return <p className="material-empty" role="status">取得中…</p>;
+  if (resource.status === "error" && resource.stale && resource.data !== null) return <p className="material-empty neutral" role="status">STALE · 最終成功データを表示中です。<span>{resource.error?.message}</span></p>;
   if (resource.status === "error") return <p className="material-empty negative" role="status">現在{label}を取得できません。<span>{resource.error?.message}</span></p>;
   if (resource.status === "unavailable") return <p className="material-empty" role="status">{label}は未取得です。<span>{resource.error?.message}</span></p>;
   if (resource.status === "empty") return <p className="material-empty">取得範囲内に該当する{label}はありません。</p>;
@@ -46,7 +61,8 @@ function ResourceNote({ resource, label, error }: { resource?: DataResource<unkn
 }
 function ResourceFooter({ resource }: { resource?: DataResource<unknown> }) {
   if (!resource) return null;
-  return <div className="material-source"><p>{resource.provider === "Finnhub" ? "Finnhub" : ""}{resource.fetchedAt ? ` · 取得 ${dateTime(resource.fetchedAt)} JST` : ""}</p>{resource.warnings.map(warning => <p key={warning}>{warning}</p>)}</div>;
+  const freshness = resource.data === null ? "UNAVAILABLE" : resource.stale ? "STALE" : "FRESH";
+  return <div className="material-source"><p>{freshness} · {resource.provider}{resource.fetchedAt ? ` · 取得 ${dateTime(resource.fetchedAt)} JST` : ""}</p>{resource.warnings.map(warning => <p key={warning}>{warning}</p>)}</div>;
 }
 function ImportanceBadge({ value }: { value: Importance }) {
   return <span className={`badge ${value === "high" ? "neutral" : ""}`}>重要度：{importanceLabels[value]}</span>;

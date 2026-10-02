@@ -2,6 +2,7 @@ import { AnalysisError, createOpenAICaller } from "./openai";
 import { resolveTextProvider, type AiProviderName, type Env } from "./provider";
 import type { InterpretCallResult, Interpreter, PrimaryFailureMeta, PrimaryFailureReason } from "./interpret-types";
 import type { AnalysisInput } from "./types";
+import { recordApiUsage } from "../api-usage";
 
 export type { AiCallMeta, InterpretCallResult, Interpreter, PrimaryFailureMeta, PrimaryFailureReason } from "./interpret-types";
 export { emptyAiMeta } from "./interpret-types";
@@ -126,6 +127,7 @@ export function createTextInterpreter(options: {
         const code = error instanceof AnalysisError ? error.code : "api_error";
         if (!openaiCaller || !FALLBACK_CODES.has(code as PrimaryFailureReason)) throw error;
         // One OpenAI attempt only. Do not re-call OpenRouter.
+        recordApiUsage("OpenRouter", "fallback");
         const primaryFailure = toSafePrimaryFailure(error) ?? { reason: code as PrimaryFailureReason, httpStatus: null, retryAfterSeconds: null };
         const result = await openaiCaller(input);
         return {
@@ -143,6 +145,7 @@ export function createTextInterpreter(options: {
     }
 
     if (openaiCaller) {
+      recordApiUsage("OpenRouter", "fallback");
       const result = await openaiCaller(input);
       return {
         interpretation: result.interpretation,

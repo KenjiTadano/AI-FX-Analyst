@@ -248,11 +248,18 @@ export function buildMultiTimeframeAnalysis(args: {
 
 export function multiTimeframeForPair(market: MarketData | null | undefined, pair: Symbol, analyzedAt = new Date().toISOString()): MultiTimeframeAnalysis | null {
   if (!market || market.symbol !== pair) return null;
+  const hourly = market.timeframes["1h"];
+  const fourHour = market.timeframes["4h"];
+  const fifteenMinute = market.timeframes["15m"];
   return buildMultiTimeframeAnalysis({
     pair,
     analyzedAt,
-    daily: market.daily,
-    timeframes: market.timeframes,
+    daily: market.daily?.stale ? null : market.daily,
+    timeframes: {
+      "15m": fifteenMinute.stale ? null : fifteenMinute,
+      "1h": hourly.stale ? null : hourly,
+      "4h": fourHour.stale ? null : fourHour,
+    },
   });
 }
 

@@ -15,6 +15,7 @@ export const analyzeChartImage = createChartAnalysisService({
     url: provider.url,
     transport: provider.transport,
     imageCapable: provider.imageCapable,
+    provider: provider.provider,
   }),
 });
 

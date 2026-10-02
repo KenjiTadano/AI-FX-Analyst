@@ -27,10 +27,12 @@ function tone(value: MarketRegimeKind | RegimeTrendDirection | VolatilityRegime)
 export function MarketRegimePanel({ pair, data, error }: { pair: Symbol; data: MarketData | null; error: string | null }) {
   const analyzedAt = data?.timeframes["1h"]?.fetchedAt ?? data?.price.fetchedAt ?? undefined;
   const analysis = marketRegimeForPair(data, pair, analyzedAt);
+  const stale = !!data?.timeframes["1h"]?.stale;
   return (
     <Panel title="相場環境" eyebrow="MARKET REGIME" className="reasons-panel regime-panel" testId="market-regime" ariaLabel="相場環境">
       {!data && !error && <p className="footnote">取得中…</p>}
       {error && <p role="status" className="footnote negative">{error}</p>}
+      {stale && <p role="status" className="footnote neutral">STALE · 古い1時間足は分析対象から除外しています。</p>}
       {analysis && (
         <>
           <dl className="mtf-summary">

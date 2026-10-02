@@ -2,6 +2,7 @@ import { calendarTtl } from "../../economic-calendar/risk-window";
 import { ResourceCache, cachePolicy } from "../cache";
 import { normalizeCalendar, normalizeNews } from "../normalize";
 import { ProviderError, unavailable } from "../resource";
+import { recordApiFailure, recordApiUsage } from "../../api-usage";
 import type { EconomicEvent, NewsItem } from "../types";
 
 export interface FinnhubConfig {
@@ -17,15 +18,16 @@ export function createFinnhub(config: FinnhubConfig, fetcher: typeof fetch = fet
     url.search = new URLSearchParams(params).toString();
     let response: Response;
     try {
+      recordApiUsage("Finnhub", "request");
       response = await fetcher(url, { headers: { "X-Finnhub-Token": config.apiKey }, cache: "no-store", redirect: "error", signal: AbortSignal.timeout(10_000) });
-    } catch { throw new ProviderError("network"); }
-    if (response.status === 401) throw new ProviderError("unauthorized");
-    if (response.status === 403) throw new ProviderError("forbidden");
-    if (response.status === 429) throw new ProviderError("rate_limited");
-    if (!response.ok) throw new ProviderError("network");
+    } catch (error) { recordApiFailure("Finnhub", error instanceof Error && ["TimeoutError", "AbortError"].includes(error.name) ? "timeout" : "providerError"); throw new ProviderError("network"); }
+    if (response.status === 401) { recordApiFailure("Finnhub"); throw new ProviderError("unauthorized"); }
+    if (response.status === 403) { recordApiFailure("Finnhub"); throw new ProviderError("forbidden"); }
+    if (response.status === 429) { recordApiFailure("Finnhub", true); throw new ProviderError("rate_limited"); }
+    if (!response.ok) { recordApiFailure("Finnhub"); throw new ProviderError("network"); }
     let body: unknown;
-    try { body = await response.json(); } catch { throw new ProviderError("invalid_response"); }
-    if (body && typeof body === "object" && "error" in body) throw new ProviderError("invalid_response");
+    try { body = await response.json(); } catch { recordApiFailure("Finnhub"); throw new ProviderError("invalid_response"); }
+    if (body && typeof body === "object" && "error" in body) { recordApiFailure("Finnhub"); throw new ProviderError("invalid_response"); }
     return body;
   }
   return {

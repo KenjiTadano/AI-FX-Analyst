@@ -14,7 +14,7 @@ export const categoryLabels: Record<FactorCategory, string> = { technical: "テ�
 const weights: Record<FactorCategory, number> = { technical: 40, news: 20, economic: 20, central_bank: 10, market_environment: 10 };
 
 export function macroeconomicQuality(resource: DataResource<EconomicIndicatorValue[]> | null | undefined): DataQuality["macroeconomicData"] {
-  if (!resource || resource.status === "unavailable" || resource.status === "error" || resource.status === "empty" || !resource.data?.length) {
+  if (!resource || resource.stale || resource.status === "unavailable" || resource.status === "error" || resource.status === "empty" || !resource.data?.length) {
     return { status: "missing", detail: "米国マクロ: 未取得", fraction: 0 };
   }
   const count = resource.data.filter(item => item.value !== null && item.observationDate).length;
@@ -36,7 +36,7 @@ export function buildInput(pair: Symbol, market: MarketData | null, fundamentals
   const news = fundamentals?.news;
   const calendar = fundamentals?.calendar;
   const macroeconomic = fundamentals?.macroeconomic;
-  const newsFresh = !!news && ["ok", "empty"].includes(news.status) && fresh(news.fetchedAt, 15 * 60_000, now);
+  const newsFresh = !!news && !news.stale && ["ok", "empty"].includes(news.status) && fresh(news.fetchedAt, 15 * 60_000, now);
   const calendarFresh = calendarKnown(calendar, now);
   const newsItems = newsFresh ? (news.data ?? []).slice(0, 10) : [];
   newsItems.forEach((item, index) => {
@@ -50,7 +50,7 @@ export function buildInput(pair: Symbol, market: MarketData | null, fundamentals
     return distance(a.scheduledAt) - distance(b.scheduledAt);
   }).slice(0, 20);
   sortedEvents.forEach((item, index) => evidence.push({ id: `economic:${index}`, categories: ["economic"], title: item.name.slice(0, 300), source: item.source, observedAt: calendar?.fetchedAt ?? null, data: { currency: item.currency, country: item.country, scheduledAt: item.scheduledAt, rawScheduledAt: item.rawScheduledAt, timezone: item.timezone, previous: item.previous, forecast: item.forecast, actual: item.actual, unit: item.unit, importance: item.importance, status: item.status, minutesUntil: item.scheduledAt ? (Date.parse(item.scheduledAt) - now) / 60_000 : null, inRiskWindow: riskState([item], now).imminent, riskWindow: windowFor(item), surprise: surprise(item) } }));
-  const macroItems = macroeconomic && ["ok", "empty"].includes(macroeconomic.status) ? (macroeconomic.data ?? []).filter(item => item.value !== null && item.observationDate) : [];
+  const macroItems = macroeconomic && !macroeconomic.stale && ["ok", "empty"].includes(macroeconomic.status) ? (macroeconomic.data ?? []).filter(item => item.value !== null && item.observationDate) : [];
   macroItems.slice(0, 12).forEach((item, index) => evidence.push({
     id: `macro:${index}`,
     categories: ["economic"],
@@ -72,7 +72,7 @@ export function buildInput(pair: Symbol, market: MarketData | null, fundamentals
       note: "FRED発表済み実績。市場予想・速報・将来値ではない。",
     },
   }));
-  const banks = fundamentals?.centralBanks.data ?? [];
+  const banks = fundamentals?.centralBanks.stale || fundamentals?.news.stale || fundamentals?.calendar.stale ? [] : fundamentals?.centralBanks.data ?? [];
   let bankObservations = 0;
   for (const bank of banks) {
     for (const [field, observation] of Object.entries({ policyRate: bank.policyRate, nextMeeting: bank.nextMeeting, policyDirection: bank.policyDirection })) {
@@ -84,7 +84,7 @@ export function buildInput(pair: Symbol, market: MarketData | null, fundamentals
   }
   const sentiment = fundamentals?.sentiment.data;
   let sentimentCount = 0;
-  if (sentiment) {
+  if (sentiment && !fundamentals?.sentiment.stale) {
     const observations = [{ id: "market", observation: sentiment.market }, ...sentiment.currencies.map(item => ({ id: item.currency, observation: item.sentiment }))];
     for (const item of observations) if (item.observation.availability === "available" && item.observation.value !== null && fresh(item.observation.asOf, 60 * 60_000, now)) {
       sentimentCount++;
