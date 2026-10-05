@@ -206,7 +206,21 @@ type ExitDecision = { reason: "STOP_LOSS" | "TAKE_PROFIT" | "TIMEOUT"; price: nu
 const categoryWeights: Record<FactorCategory, number> = { technical: 40, news: 20, economic: 20, central_bank: 10, market_environment: 10 };
 const researchSafetyBlockReasons = new Set(["STALE_DATA", "INSUFFICIENT_DATA", "EXTENDED_MARKET", "ECONOMIC_EVENT"]);
 const candidateReasons: BlockedCandidateReasonCode[] = [
-  "ENTRY_GAP_AMBIGUOUS", "WAIT_DIRECTION", "INVALID_SCENARIO", "INSUFFICIENT_DATA", "SAFETY_BLOCK", "POSITION_LIMIT", "ENTRY_PENDING", "MAX_TRADES_PER_DAY", "DAILY_LOSS_LIMIT", "CONSECUTIVE_LOSS_LIMIT", "INVALID_QUANTITY", "UNKNOWN_EVENT_CONTEXT", "UNKNOWN_AI_CONTEXT", "NO_FUTURE_ENTRY_CANDLE", "UNFILLED_AT_DATASET_END",
+  "ENTRY_GAP_AMBIGUOUS",
+  "WAIT_DIRECTION",
+  "INVALID_SCENARIO",
+  "INSUFFICIENT_DATA",
+  "SAFETY_BLOCK",
+  "POSITION_LIMIT",
+  "ENTRY_PENDING",
+  "MAX_TRADES_PER_DAY",
+  "DAILY_LOSS_LIMIT",
+  "CONSECUTIVE_LOSS_LIMIT",
+  "INVALID_QUANTITY",
+  "UNKNOWN_EVENT_CONTEXT",
+  "UNKNOWN_AI_CONTEXT",
+  "NO_FUTURE_ENTRY_CANDLE",
+  "UNFILLED_AT_DATASET_END",
 ];
 const exitReasons: ExitReasonCode[] = ["STOP_LOSS", "TAKE_PROFIT", "TIMEOUT", "OPEN_UNREALIZED"];
 
@@ -220,7 +234,7 @@ function finiteConfig(config: TradeSimulatorConfig): void {
   if (!Number.isFinite(config.dailyLossLimitPercent) || config.dailyLossLimitPercent <= 0 || config.dailyLossLimitPercent > 10) throw new Error("dailyLossLimitPercent must be in (0, 10]");
   if (!Number.isSafeInteger(config.consecutiveLossLimit) || config.consecutiveLossLimit <= 0) throw new Error("consecutiveLossLimit must be a positive integer");
   if (!Number.isSafeInteger(config.maxHoldingCandles) || config.maxHoldingCandles <= 0) throw new Error("maxHoldingCandles must be a positive integer");
-  if (![config.spreadPips, config.slippagePips, config.commissionJpyPerTrade].every(value => Number.isFinite(value) && value === 0)) {
+  if (![config.spreadPips, config.slippagePips, config.commissionJpyPerTrade].every((value) => Number.isFinite(value) && value === 0)) {
     throw new Error("non-zero spread/slippage/commission is not modeled in Task115 v1");
   }
 }
@@ -229,17 +243,9 @@ export function jstDate(timestamp: number): string {
   return new Date(timestamp + 9 * 60 * 60 * 1000).toISOString().slice(0, 10);
 }
 
-export function evaluateEntryLimit(input: {
-  entriesToday: number;
-  maxTradesPerJstDay: number;
-  realizedPnlTodayJpy: number;
-  startOfDayEquityJpy: number;
-  dailyLossLimitPercent: number;
-  consecutiveLosses: number;
-  consecutiveLossLimit: number;
-}): "MAX_TRADES_PER_DAY" | "DAILY_LOSS_LIMIT" | "CONSECUTIVE_LOSS_LIMIT" | null {
+export function evaluateEntryLimit(input: { entriesToday: number; maxTradesPerJstDay: number; realizedPnlTodayJpy: number; startOfDayEquityJpy: number; dailyLossLimitPercent: number; consecutiveLosses: number; consecutiveLossLimit: number }): "MAX_TRADES_PER_DAY" | "DAILY_LOSS_LIMIT" | "CONSECUTIVE_LOSS_LIMIT" | null {
   if (input.entriesToday >= input.maxTradesPerJstDay) return "MAX_TRADES_PER_DAY";
-  if (input.realizedPnlTodayJpy <= -(input.startOfDayEquityJpy * input.dailyLossLimitPercent / 100)) return "DAILY_LOSS_LIMIT";
+  if (input.realizedPnlTodayJpy <= -((input.startOfDayEquityJpy * input.dailyLossLimitPercent) / 100)) return "DAILY_LOSS_LIMIT";
   if (input.consecutiveLosses >= input.consecutiveLossLimit) return "CONSECUTIVE_LOSS_LIMIT";
   return null;
 }
@@ -249,27 +255,34 @@ export function updateConsecutiveLosses(current: number, realizedGrossPnlJpy: nu
 }
 
 export function evaluateResearchSafety(input: { technicalReady: boolean; productionReasonCodes: readonly string[] }): { status: ResearchSafetyStatus; reasons: string[] } {
-  const reasons = new Set(input.productionReasonCodes.filter(code => researchSafetyBlockReasons.has(code)));
+  const reasons = new Set(input.productionReasonCodes.filter((code) => researchSafetyBlockReasons.has(code)));
   if (!input.technicalReady) reasons.add("INSUFFICIENT_DATA");
   return { status: reasons.size ? "BLOCK" : "ALLOW", reasons: [...reasons] };
 }
 
 function technicalQuality(technical: ReturnType<typeof evaluateTechnical>, hasRate: boolean): DataQuality {
   const fractions: Record<FactorCategory, number> = {
-    technical: (hasRate ? 0.2 : 0) + technical.frames.reduce((sum, frame) => sum + frame.completeness * 0.8 / 3, 0),
+    technical: (hasRate ? 0.2 : 0) + technical.frames.reduce((sum, frame) => sum + (frame.completeness * 0.8) / 3, 0),
     news: 0,
     economic: 0,
     central_bank: 0,
     market_environment: 0,
   };
-  const categories = Object.fromEntries(Object.entries(fractions).map(([category, fraction]) => [category, {
-    status: fraction >= 0.999 ? "ok" as const : fraction > 0 ? "partial" as const : "missing" as const,
-    detail: `${category}: historical context unavailable`,
-    fraction,
-  }])) as DataQuality["categories"];
+  const categories = Object.fromEntries(
+    Object.entries(fractions).map(([category, fraction]) => [
+      category,
+      {
+        status: fraction >= 0.999 ? ("ok" as const) : fraction > 0 ? ("partial" as const) : ("missing" as const),
+        detail: `${category}: historical context unavailable`,
+        fraction,
+      },
+    ]),
+  ) as DataQuality["categories"];
   return {
     score: Math.round(Object.entries(fractions).reduce((sum, [category, fraction]) => sum + categoryWeights[category as FactorCategory] * fraction, 0)),
-    missingData: Object.values(categories).filter(item => item.status !== "ok").map(item => item.detail),
+    missingData: Object.values(categories)
+      .filter((item) => item.status !== "ok")
+      .map((item) => item.detail),
     categories,
     macroeconomicData: { status: "missing", detail: "Historical macro unavailable", fraction: 0 },
   };
@@ -295,7 +308,7 @@ function scenarioAt(dataset: HistoricalDataset, replayRecord: SignalReplayRecord
 function prepareDatasets(rawDatasets: HistoricalDataset[], signalTimeframe: HistoricalTimeframe): PreparedDataset[] {
   if (!rawDatasets.length) throw new Error("at least one historical dataset is required");
   const seen = new Set<string>();
-  const prepared = rawDatasets.map(raw => {
+  const prepared = rawDatasets.map((raw) => {
     const validated = validateHistoricalDataset(raw);
     if (!validated.valid) throw new Error(`invalid historical dataset: ${validated.errors.join("; ")}`);
     const dataset = validated.dataset;
@@ -305,13 +318,13 @@ function prepareDatasets(rawDatasets: HistoricalDataset[], signalTimeframe: Hist
     if (!candles?.length) throw new Error(`${dataset.pair} has no ${signalTimeframe} candles`);
     const replay = replayHistoricalSignals(dataset, { signalTimeframe });
     const signalIndexByAt = new Map(replay.signals.map((record, index) => [record.at, index]));
-    const scenarioByAt = new Map(replay.signals.map(record => [record.at, scenarioAt(dataset, record)]));
+    const scenarioByAt = new Map(replay.signals.map((record) => [record.at, scenarioAt(dataset, record)]));
     return { dataset, replay, candles, signalIndexByAt, scenarioByAt };
   });
 
-  const reference = prepared[0]!.candles.map(candle => Date.parse(candle.time) + historicalTimeframeDurationMs[signalTimeframe]);
+  const reference = prepared[0]!.candles.map((candle) => Date.parse(candle.time) + historicalTimeframeDurationMs[signalTimeframe]);
   for (const current of prepared.slice(1)) {
-    const timestamps = current.candles.map(candle => Date.parse(candle.time) + historicalTimeframeDurationMs[signalTimeframe]);
+    const timestamps = current.candles.map((candle) => Date.parse(candle.time) + historicalTimeframeDurationMs[signalTimeframe]);
     if (timestamps.length !== reference.length || timestamps.some((at, index) => at !== reference[index])) {
       throw new Error("multi-pair simulation requires identical signal-timeframe candle close timestamps");
     }
@@ -355,7 +368,7 @@ function recordExit(position: SimulatedTrade, decision: Exclude<ExitDecision, nu
 }
 
 function emptyCandidateCounts(): Record<BlockedCandidateReasonCode, number> {
-  return Object.fromEntries(candidateReasons.map(reason => [reason, 0])) as Record<BlockedCandidateReasonCode, number>;
+  return Object.fromEntries(candidateReasons.map((reason) => [reason, 0])) as Record<BlockedCandidateReasonCode, number>;
 }
 
 function emptyEntryOpportunityCounts(): Record<EntryFillReason, number> {
@@ -369,7 +382,7 @@ function median(values: number[]): number | null {
   return sorted.length % 2 ? sorted[middle]! : (sorted[middle - 1]! + sorted[middle]!) / 2;
 }
 
-export function simulateTrades(rawDatasets: HistoricalDataset | HistoricalDataset[], inputConfig: Partial<TradeSimulatorConfig> = {}): TradeSimulatorResult {
+export function simulateTrades(rawDatasets: HistoricalDataset | HistoricalDataset[], inputConfig: Partial<TradeSimulatorConfig> = {}, options: { evaluationStartAt?: string } = {}): TradeSimulatorResult {
   const config: TradeSimulatorConfig = { ...defaultTradeSimulatorConfig, ...inputConfig };
   if (!(historicalTimeframes as readonly string[]).includes(config.signalTimeframe)) throw new Error("signalTimeframe is unsupported");
   finiteConfig(config);
@@ -377,6 +390,8 @@ export function simulateTrades(rawDatasets: HistoricalDataset | HistoricalDatase
   const prepared = prepareDatasets(rawList, config.signalTimeframe);
   const timeline = prepared[0]!.candles;
   const duration = historicalTimeframeDurationMs[config.signalTimeframe];
+  const evaluationStartAt = options.evaluationStartAt === undefined ? null : Date.parse(options.evaluationStartAt);
+  if (evaluationStartAt !== null && !Number.isFinite(evaluationStartAt)) throw new Error("evaluationStartAt must be a valid timestamp");
   const signals: SimulatedSignal[] = [];
   const trades: SimulatedTrade[] = [];
   const blockedCandidateReasons = emptyCandidateCounts();
@@ -425,12 +440,12 @@ export function simulateTrades(rawDatasets: HistoricalDataset | HistoricalDatase
     consecutiveLosses = updateConsecutiveLosses(consecutiveLosses, closedPosition.realizedGrossPnlJpy!);
     peakEquity = Math.max(peakEquity, equity);
     const drawdownJpy = peakEquity - equity;
-    const drawdownPercent = peakEquity > 0 ? drawdownJpy / peakEquity * 100 : 0;
+    const drawdownPercent = peakEquity > 0 ? (drawdownJpy / peakEquity) * 100 : 0;
     maxDrawdownJpy = Math.max(maxDrawdownJpy, drawdownJpy);
     maxDrawdownPercent = Math.max(maxDrawdownPercent, drawdownPercent);
     equityCurve.push({ at: closedAt, equityJpy: equity, peakEquityJpy: peakEquity, drawdownJpy, drawdownPercent });
     trades.push(closedPosition);
-    const signal = signals.find(row => row.tradeId === closedPosition.id);
+    const signal = signals.find((row) => row.tradeId === closedPosition.id);
     if (signal) {
       signal.exitAt = closedPosition.exitAt;
       signal.exitPrice = closedPosition.exitPrice;
@@ -451,6 +466,7 @@ export function simulateTrades(rawDatasets: HistoricalDataset | HistoricalDatase
 
   for (let index = 0; index < timeline.length; index++) {
     const signalBarTime = Date.parse(timeline[index]!.time);
+    if (evaluationStartAt !== null && signalBarTime + duration < evaluationStartAt) continue;
     ensureDay(signalBarTime);
 
     const eligibleAtTimestamp: { signal: SimulatedSignal; scenario: TradeScenario; item: PreparedDataset }[] = [];
@@ -554,7 +570,7 @@ export function simulateTrades(rawDatasets: HistoricalDataset | HistoricalDatase
       const scenario = item.scenarioByAt.get(signalAt) ?? null;
       const researchSafety = evaluateResearchSafety({
         technicalReady: replayRecord.status === "EVALUATED",
-        productionReasonCodes: replayRecord.safetyReasons.map(reason => reason.code),
+        productionReasonCodes: replayRecord.safetyReasons.map((reason) => reason.code),
       });
       const row: SimulatedSignal = {
         pair: item.dataset.pair as Symbol,
@@ -563,7 +579,7 @@ export function simulateTrades(rawDatasets: HistoricalDataset | HistoricalDatase
         direction: replayRecord.direction,
         productionAction: replayRecord.actionObservation,
         productionSafety: replayRecord.safetyStatus,
-        productionSafetyReasons: replayRecord.safetyReasons.map(reason => reason.code),
+        productionSafetyReasons: replayRecord.safetyReasons.map((reason) => reason.code),
         researchSafety: researchSafety.status,
         researchSafetyReasons: researchSafety.reasons,
         contextReasons: ["UNKNOWN_AI_CONTEXT", "UNKNOWN_FUNDAMENTAL_CONTEXT", "UNKNOWN_EVENT_CONTEXT"],
@@ -619,7 +635,7 @@ export function simulateTrades(rawDatasets: HistoricalDataset | HistoricalDatase
     blockedCandidateReasons.UNFILLED_AT_DATASET_END++;
   }
   if (position) {
-    const item = prepared.find(entry => entry.dataset.pair === position!.pair)!;
+    const item = prepared.find((entry) => entry.dataset.pair === position!.pair)!;
     const lastBar = item.candles.at(-1)!;
     position.holdingCandles = Math.max(0, item.candles.length - Number(position.entryBarTimeIndex));
     position.unrealizedGrossPnlJpy = pnl(position.side, position.entryPrice, lastBar.close, position.quantity);
@@ -628,27 +644,37 @@ export function simulateTrades(rawDatasets: HistoricalDataset | HistoricalDatase
     trades.push(position);
   }
 
-  const closed = trades.filter(trade => trade.status === "CLOSED").toSorted((a, b) => a.exitAt!.localeCompare(b.exitAt!) || a.id.localeCompare(b.id));
-  const wins = closed.filter(trade => trade.realizedGrossPnlJpy! > 0);
-  const losses = closed.filter(trade => trade.realizedGrossPnlJpy! < 0);
+  const closed = trades.filter((trade) => trade.status === "CLOSED").toSorted((a, b) => a.exitAt!.localeCompare(b.exitAt!) || a.id.localeCompare(b.id));
+  const wins = closed.filter((trade) => trade.realizedGrossPnlJpy! > 0);
+  const losses = closed.filter((trade) => trade.realizedGrossPnlJpy! < 0);
   const breakEven = closed.length - wins.length - losses.length;
   const gross = closed.reduce((sum, trade) => sum + trade.realizedGrossPnlJpy!, 0);
   const grossWins = wins.reduce((sum, trade) => sum + trade.realizedGrossPnlJpy!, 0);
   const grossLosses = Math.abs(losses.reduce((sum, trade) => sum + trade.realizedGrossPnlJpy!, 0));
-  const rValues = closed.map(trade => trade.realizedR!).filter(Number.isFinite);
-  let maxWins = 0, maxLosses = 0, runWins = 0, runLosses = 0;
+  const rValues = closed.map((trade) => trade.realizedR!).filter(Number.isFinite);
+  let maxWins = 0,
+    maxLosses = 0,
+    runWins = 0,
+    runLosses = 0;
   for (const trade of closed) {
-    if (trade.realizedGrossPnlJpy! > 0) { runWins++; runLosses = 0; }
-    else if (trade.realizedGrossPnlJpy! < 0) { runLosses++; runWins = 0; }
-    else { runWins = 0; runLosses = 0; }
+    if (trade.realizedGrossPnlJpy! > 0) {
+      runWins++;
+      runLosses = 0;
+    } else if (trade.realizedGrossPnlJpy! < 0) {
+      runLosses++;
+      runWins = 0;
+    } else {
+      runWins = 0;
+      runLosses = 0;
+    }
     maxWins = Math.max(maxWins, runWins);
     maxLosses = Math.max(maxLosses, runLosses);
   }
-  const exitReasonDistribution = Object.fromEntries(exitReasons.map(reason => [reason, trades.filter(trade => trade.exitReason === reason).length])) as Record<ExitReasonCode, number>;
-  const pairDistribution = Object.fromEntries(symbols.map(pair => [pair, trades.filter(trade => trade.pair === pair).length])) as Record<Symbol, number>;
+  const exitReasonDistribution = Object.fromEntries(exitReasons.map((reason) => [reason, trades.filter((trade) => trade.exitReason === reason).length])) as Record<ExitReasonCode, number>;
+  const pairDistribution = Object.fromEntries(symbols.map((pair) => [pair, trades.filter((trade) => trade.pair === pair).length])) as Record<Symbol, number>;
   const directions = ["strong_buy", "buy", "strong_sell", "sell"] as const;
-  const directionDistribution = Object.fromEntries(directions.map(direction => [direction, trades.filter(trade => trade.direction === direction).length])) as TradeSimulatorResult["directionDistribution"];
-  const openPositions = trades.filter(trade => trade.status === "OPEN_UNREALIZED");
+  const directionDistribution = Object.fromEntries(directions.map((direction) => [direction, trades.filter((trade) => trade.direction === direction).length])) as TradeSimulatorResult["directionDistribution"];
+  const openPositions = trades.filter((trade) => trade.status === "OPEN_UNREALIZED");
   return {
     config,
     metadata: {
@@ -665,7 +691,7 @@ export function simulateTrades(rawDatasets: HistoricalDataset | HistoricalDatase
       signalEntryPolicy: TRADE_SIMULATOR_ENTRY_POLICY,
       maxConcurrentPositions: 1,
       dailyTimezone: "Asia/Tokyo",
-      datasetIds: prepared.map(item => item.dataset.id),
+      datasetIds: prepared.map((item) => item.dataset.id),
     },
     signals,
     trades,
@@ -681,9 +707,9 @@ export function simulateTrades(rawDatasets: HistoricalDataset | HistoricalDatase
       wins: wins.length,
       losses: losses.length,
       breakEven,
-      winRatePercent: closed.length ? wins.length / closed.length * 100 : null,
+      winRatePercent: closed.length ? (wins.length / closed.length) * 100 : null,
       realizedGrossPnlJpy: gross,
-      grossReturnPercent: config.initialCapital > 0 ? gross / config.initialCapital * 100 : 0,
+      grossReturnPercent: config.initialCapital > 0 ? (gross / config.initialCapital) * 100 : 0,
       averageWinJpy: wins.length ? grossWins / wins.length : null,
       averageLossJpy: losses.length ? -grossLosses / losses.length : null,
       profitFactor: grossLosses ? grossWins / grossLosses : null,
