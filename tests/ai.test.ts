@@ -96,6 +96,7 @@ test("missing and stale data never become directional fundamentals", () => {
   const snapshot = buildInput("USD/JPY", data, null, now);
   assert.equal(snapshot.currentRate, null);
   assert.equal(snapshot.technicalAnalysis.ready, false);
+  assert.ok(snapshot.staleDataSources?.includes("market.price"));
   assert.equal(snapshot.dataAvailability.categories.news.status, "missing");
   const result = finalizeAnalysis(snapshot, null, model, "not_configured", now);
   assert.equal(result.signal, "wait"); assert.equal(result.scenario, null);
@@ -127,7 +128,9 @@ test("low confidence, contradictions, acute moves and imminent events each force
     if (condition === "unknown-time") { snapshot.eventRisk.uncertainTime = true; snapshot.eventRisk.reasons = ["時刻未確認"]; }
     if (condition === "quality") snapshot.dataAvailability.score = 40;
     if (condition === "preferWait") result.preferWait = true;
-    assert.equal(finalizeAnalysis(snapshot, result, model, null, now).signal, "wait", condition);
+    const analysis = finalizeAnalysis(snapshot, result, model, null, now);
+    assert.equal(analysis.signal, "wait", condition);
+    assert.equal(analysis.directionSignal, signalFromScore(snapshot.technicalAnalysis.score), condition);
   }
 });
 test("opposing fundamental factors lower confidence and block a technical-only sell", () => {
@@ -165,6 +168,8 @@ test("RR failure changes a directional analysis to WAIT without a scenario", () 
   const snapshot = input(); snapshot.technicalAnalysis.frames.find(frame => frame.timeframe === "1h")!.recentHigh = 150;
   const result = finalizeAnalysis(snapshot, interpretation(snapshot, "bullish"), model, null, now);
   assert.equal(result.signal, "wait"); assert.equal(result.scenario, null); assert.ok(result.decisionReasons.some(reason => reason.includes("RR")));
+  assert.notEqual(result.directionSignal, "wait");
+  assert.equal(result.signalEngineV2?.scenarioStatus, "unavailable");
 });
 test("model JSON must have exactly five categories and grounded evidence", () => {
   const snapshot = input(); const valid = interpretation(snapshot);
@@ -340,7 +345,8 @@ test("AI failure is WAIT with technical factors, retry cache and no leaked excep
   let time = now, calls = 0;
   const service = createAnalysisService({ market: async () => market(), fundamental: async () => fundamentals(), interpret: async () => { calls++; throw new Error("SECRET"); }, enabled: true, model, now: () => time });
   const first = await service("USD/JPY");
-  assert.equal(first.success, true); assert.equal(first.data?.signal, "wait"); assert.equal(first.data?.scenario, null);
+  assert.equal(first.success, true); assert.equal(first.data?.signal, "wait"); assert.equal(first.data?.action, "WAIT");
+  assert.ok(first.data?.scenario); assert.notEqual(first.data?.directionSignal, "wait");
   assert.equal(first.data?.technicalScore, 100); assert.ok(!JSON.stringify(first).includes("SECRET"));
   await service("USD/JPY"); assert.equal(calls, 1);
   time += 60_001; await service("USD/JPY"); assert.equal(calls, 2);

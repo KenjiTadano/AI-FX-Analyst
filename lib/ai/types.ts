@@ -4,6 +4,7 @@ import type { MarketRegimeAnalysis } from "../market/market-regime";
 import type { EconomicEvent, FundamentalData } from "../fundamental/types";
 import type { ChartImageAnalysis } from "../chart-analysis/types";
 import type { StructuredEntryTrigger } from "./entry-trigger";
+import type { SignalEngineV2Result } from "./signal-engine-v2";
 
 export const tradeSignals = ["strong_buy", "buy", "wait", "sell", "strong_sell"] as const;
 export type TradeSignal = (typeof tradeSignals)[number];
@@ -60,6 +61,7 @@ export interface AnalysisInput {
   dataAvailability: DataQuality;
   timestamp: string;
   eventRisk: { imminent: boolean; uncertainTime: boolean; nextRiskAt: string | null; reasons: string[]; events?: EconomicEvent[]; known?: boolean; nextBoundaryAt?: string | null };
+  staleDataSources?: string[];
   chartImageAnalysis?: ChartImageAnalysis;
   /** Task026 optional deterministic market evidence. Never a trade Action. */
   multiTimeframeAnalysis?: MultiTimeframeAnalysis;
@@ -110,6 +112,7 @@ export interface AIAnalysis {
   analyzedAt: string;
   expiresAt: string;
   decisionReasons: string[];
+  signalEngineV2?: SignalEngineV2Result;
   ai: {
     status: "available" | "unavailable" | "error";
     model: string | null;

@@ -5,7 +5,7 @@ import type { ChartImageAnalysis } from "../chart-analysis/types";
 import { FRED_SERIES_COUNT } from "../fundamental/fred-series";
 import { mtfEvidencePayload, multiTimeframeForPair, sanitizeMultiTimeframeAnalysis } from "../market/multi-timeframe";
 import { marketRegimeForPair, regimeEvidencePayload, sanitizeMarketRegimeAnalysis } from "../market/market-regime";
-import type { MarketData, Symbol } from "../market/types";
+import { timeframes, type MarketData, type Symbol, type Timeframe } from "../market/types";
 import type { DataResource, EconomicIndicatorValue, FundamentalData } from "../fundamental/types";
 import { currentRate, evaluateTechnical, fresh } from "./technical";
 import type { AnalysisInput, Availability, DataQuality, Evidence, FactorCategory } from "./types";
@@ -30,6 +30,24 @@ export function macroeconomicQuality(resource: DataResource<EconomicIndicatorVal
 export function buildInput(pair: Symbol, market: MarketData | null, fundamentals: FundamentalData | null, now = Date.now(), chartImageAnalysis?: ChartImageAnalysis | null): AnalysisInput {
   if (market?.symbol !== pair) market = null;
   if (fundamentals?.symbol !== pair) fundamentals = null;
+  const staleDataSources: string[] = [];
+  if (market) {
+    if (market.price.stale || (market.price.data !== null && !fresh(market.price.fetchedAt, 120_000, now))) staleDataSources.push("market.price");
+    const maxAge: Record<Timeframe, number> = { "15m": 2 * 900_000 + 300_000, "1h": 2 * 3_600_000 + 300_000, "4h": 2 * 14_400_000 + 300_000 };
+    for (const timeframe of timeframes) {
+      const resource = market.timeframes[timeframe];
+      if (resource.stale || (resource.data && (!fresh(resource.fetchedAt, 600_000, now) || !fresh(resource.data.lastClosedAt, maxAge[timeframe], now)))) {
+        staleDataSources.push(`market.${timeframe}`);
+      }
+    }
+  }
+  if (fundamentals) {
+    if (fundamentals.news.stale || (fundamentals.news.data !== null && !fresh(fundamentals.news.fetchedAt, 15 * 60_000, now))) staleDataSources.push("fundamental.news");
+    if (fundamentals.calendar.stale || (fundamentals.calendar.data !== null && !calendarKnown(fundamentals.calendar, now))) staleDataSources.push("fundamental.calendar");
+    if (fundamentals.macroeconomic.stale || fundamentals.macroeconomic.data?.some(item => item.stale)) staleDataSources.push("fundamental.macroeconomic");
+    if (fundamentals.centralBanks.stale) staleDataSources.push("fundamental.centralBanks");
+    if (fundamentals.sentiment.stale) staleDataSources.push("fundamental.sentiment");
+  }
   const technicalAnalysis = evaluateTechnical(market, now);
   const rate = currentRate(market, now);
   const evidence: Evidence[] = technicalAnalysis.frames.filter(frame => frame.available).map(frame => ({ id: `technical:${frame.timeframe}`, categories: ["technical"], source: "Twelve Data", title: `${frame.timeframe} technical`, observedAt: frame.lastClosedAt, data: frame }));
@@ -164,5 +182,5 @@ export function buildInput(pair: Symbol, market: MarketData | null, fundamentals
     macroeconomicData: macroQuality,
   };
   const eventRisk: AnalysisInput["eventRisk"] = { ...riskState(events, now), events, known: calendarFresh };
-  return { pair, currentRate: rate, technicalAnalysis, fundamentalData: evidence, dataAvailability, timestamp: analyzedAt, eventRisk, ...(attachedChart ? { chartImageAnalysis: attachedChart } : {}), ...(mtf ? { multiTimeframeAnalysis: mtf } : {}), ...(regime ? { marketRegimeAnalysis: regime } : {}) };
+  return { pair, currentRate: rate, technicalAnalysis, fundamentalData: evidence, dataAvailability, timestamp: analyzedAt, eventRisk, staleDataSources, ...(attachedChart ? { chartImageAnalysis: attachedChart } : {}), ...(mtf ? { multiTimeframeAnalysis: mtf } : {}), ...(regime ? { marketRegimeAnalysis: regime } : {}) };
 }

@@ -238,7 +238,7 @@ export function AIOverview({
 
       <ol className="signal-scale" aria-label="5段階のAI総合判定">{tradeSignals.map(item => <li key={item} className={signal === item ? `selected ${tone(item)}` : ""} aria-current={signal === item ? "step" : undefined}>{signalLabels[item]}</li>)}</ol>
 
-      <div className="ai-confidence"><span>方向スコア <strong>{data ? `${data.score > 0 ? "+" : ""}${data.score}` : "—"}</strong></span><span>データ充足率 <strong>{data ? `${data.dataQuality.score}%` : "—"}</strong></span></div>
+      <div className="ai-confidence"><span>方向スコア <strong>{data ? `${(data.signalEngineV2?.score ?? data.technicalScore) > 0 ? "+" : ""}${data.signalEngineV2?.score ?? data.technicalScore}` : "—"}</strong></span><span>データ充足率 <strong>{data ? `${data.dataQuality.score}%` : "—"}</strong></span></div>
 
       {data && <div className="quality-grid used-data-grid" aria-label="使用データ">
         <span className="badge">Market Data · {data.currentRate != null ? "✓" : "—"}</span>

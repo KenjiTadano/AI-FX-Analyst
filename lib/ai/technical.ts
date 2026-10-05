@@ -3,7 +3,8 @@ import { timeframes, type MarketData, type Resource, type Technical, type Timefr
 import type { Direction, TechnicalAnalysis, TechnicalFrame } from "./types";
 
 const duration: Record<Timeframe, number> = { "15m": 900_000, "1h": 3_600_000, "4h": 14_400_000 };
-const weights: Record<Timeframe, number> = { "15m": 0.3, "1h": 0.4, "4h": 0.3 };
+export const timeframeWeights: Record<Timeframe, number> = { "15m": 0.3, "1h": 0.4, "4h": 0.3 };
+export const technicalScoreWeights = { priceVsSma: 15, smaAlignment: 20, smaSlope: 10, momentum: 15 } as const;
 export const finite = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value);
 export const positive = (value: unknown): value is number => finite(value) && value > 0;
 export function fresh(at: string | null | undefined, maxAge: number, now: number) {
@@ -40,8 +41,8 @@ function evaluateFrame(frame: Timeframe, resource: Resource<Technical> | undefin
   const priceVsSma = compare(rate, indicators.sma20);
   const shortVsMedium = compare(indicators.sma20, indicators.sma75);
   const mediumVsLong = compare(indicators.sma75, indicators.sma200);
-  const score = directionValue(priceVsSma) * 15 + directionValue(shortVsMedium) * 20 + directionValue(mediumVsLong) * 20
-    + directionValue(compare(smaSlopes.short, 0)) * 10 + directionValue(compare(smaSlopes.medium, 0)) * 10 + directionValue(compare(smaSlopes.long, 0)) * 10 + directionValue(compare(momentum, 0)) * 15;
+  const score = directionValue(priceVsSma) * technicalScoreWeights.priceVsSma + directionValue(shortVsMedium) * technicalScoreWeights.smaAlignment + directionValue(mediumVsLong) * technicalScoreWeights.smaAlignment
+    + directionValue(compare(smaSlopes.short, 0)) * technicalScoreWeights.smaSlope + directionValue(compare(smaSlopes.medium, 0)) * technicalScoreWeights.smaSlope + directionValue(compare(smaSlopes.long, 0)) * technicalScoreWeights.smaSlope + directionValue(compare(momentum, 0)) * technicalScoreWeights.momentum;
   const numericFields = [rate, indicators.sma20, indicators.sma75, indicators.sma200, ...Object.values(smaSlopes), indicators.rsi14, atr, momentum, indicators.recentHigh, indicators.recentLow];
   const extended = (momentumAtr !== null && Math.abs(momentumAtr) >= 2) || (rate !== null && indicators.sma20 !== null && atr !== null && Math.abs(rate - indicators.sma20) >= atr * 2);
   return { ...empty, available: true, completeness: numericFields.filter(finite).length / numericFields.length, lastClosedAt: resource.data.lastClosedAt, score, close: last.close, sma20: indicators.sma20, sma75: indicators.sma75, sma200: indicators.sma200, priceVsSma, shortVsMedium, mediumVsLong, smaSlopes, rsi: indicators.rsi14, rsiState: indicators.rsi14 === null ? "unknown" : indicators.rsi14 < 30 ? "oversold" : indicators.rsi14 > 70 ? "overbought" : "normal", momentum, momentumAtr, atr, recentHigh: indicators.recentHigh, recentLow: indicators.recentLow, extended };
@@ -56,7 +57,7 @@ export function evaluateTechnical(market: MarketData | null, now: number): Techn
     ...(frame.extended ? [`${frame.timeframe}: ATRに対して変動・移動平均線との乖離が大きく、追いかけエントリーに注意。`] : []),
   ]);
   return {
-    score: Math.round(frames.reduce((sum, frame) => sum + frame.score * weights[frame.timeframe], 0)), frames, warnings,
+    score: Math.round(frames.reduce((sum, frame) => sum + frame.score * timeframeWeights[frame.timeframe], 0)), frames, warnings,
     ready: rate !== null && frames.filter(frame => frame.available && frame.completeness === 1).length >= 2,
     extended: frames.some(frame => frame.extended),
     factors: frames.map(frame => ({ category: "technical", title: `${frame.timeframe} テクニカル`, direction: frame.available ? scoreDirection(frame.score) : "unknown", impact: "high", source: "Twelve Data / TypeScript計算", evidenceIds: frame.available ? [`technical:${frame.timeframe}`] : [], reason: frame.available ? `価格対SMA・移動平均線の並びと傾き・5本モメンタムの評価は${frame.score}。RSI ${frame.rsi?.toFixed(1) ?? "未取得"}は過熱度として別評価。` : "新鮮な確定足データが不足しています。" })),

@@ -4,8 +4,11 @@ import { directionValue, scoreDirection } from "./technical";
 import { generateScenario } from "./scenario";
 import type { AiProviderName } from "./provider";
 import type { PrimaryFailureMeta } from "./interpret-types";
-import { factorCategories, type AIAnalysis, type AIErrorCode, type AnalysisInput, type ModelInterpretation, type TradeSignal } from "./types";
+import { factorCategories, type AIAnalysis, type AIErrorCode, type AnalysisInput, type ModelInterpretation } from "./types";
 import { sanitizeStructuredEntryTrigger } from "./entry-trigger";
+import { evaluateSignalEngineV2, signalFromScore } from "./signal-engine-v2";
+
+export { signalFromScore };
 
 export const aiMessages: Record<AIErrorCode, string> = {
   not_configured: "OpenAI API設定が不足しています。テクニカル評価のみ表示しています。",
@@ -35,10 +38,6 @@ export function aiMessage(code: AIErrorCode, provider: AiProviderName = "openai"
       : "AIプロバイダの利用枠または課金状態のためAIを取得できません。テクニカル評価のみ表示しています。";
   }
   return aiMessages[code];
-}
-
-export function signalFromScore(score: number): TradeSignal {
-  return score >= 60 ? "strong_buy" : score >= 20 ? "buy" : score <= -60 ? "strong_sell" : score <= -20 ? "sell" : "wait";
 }
 
 export type FinalizeAiMeta = {
@@ -75,23 +74,29 @@ export function finalizeAnalysis(
   const contradictory = !!interpretation?.contradictions || (Math.abs(technical.score) >= 20 && Math.abs(fundamentalScore) >= 6 && Math.sign(technical.score) !== Math.sign(fundamentalScore)) || technical.frames.some(frame => frame.available && Math.abs(frame.score) >= 20 && Math.sign(frame.score) !== Math.sign(technical.score));
   const overextendedRsi = technical.frames.some(frame => ["oversold", "overbought"].includes(frame.rsiState));
   const confidence = aiReady ? Math.max(0, Math.round(Math.min(interpretation.confidence, input.dataAvailability.score, 90) - (contradictory ? 20 : 0) - (overextendedRsi ? 8 : 0) - (economicBlocked ? 15 : 0))) : Math.min(35, input.dataAvailability.score);
-  const decisionReasons: string[] = [];
   const messageProvider = meta.provider ?? provider;
-  if (!aiReady) decisionReasons.push(aiMessage(error ?? "api_error", messageProvider, meta.detail));
-  if (!technical.ready) decisionReasons.push("新鮮なレートと十分な2時間軸以上の確定足が必要です。");
-  if (input.dataAvailability.score < 60) decisionReasons.push("データ充足率が60%未満のため待機します。");
-  if (confidence < 55) decisionReasons.push("確信度が55%未満のため待機します。");
-  if (contradictory) decisionReasons.push("テクニカルと他の材料、または時間軸間に矛盾があります。");
-  if (technical.extended) decisionReasons.push("急変・大きな乖離があり、追いかけエントリーを見送ります。");
-  if (input.eventRisk.nextRiskAt && now >= Date.parse(input.eventRisk.nextRiskAt)) decisionReasons.push("分析中に経済指標のリスク時間帯へ入ったため待機します。");
-  if (economicBlocked) decisionReasons.push(...new Set([...calendarRisk.reasons, ...input.eventRisk.reasons]));
-  if (interpretation?.preferWait) decisionReasons.push("AIの材料統合でも、条件が整うまで待つ判断です。");
-  let signal = decisionReasons.length ? "wait" as const : signalFromScore(score);
-  if (signal === "wait" && !decisionReasons.length) decisionReasons.push("方向スコアが中立帯です。");
-  if (confidence < 75 && (signal === "strong_buy" || signal === "strong_sell")) signal = signal === "strong_buy" ? "buy" : "sell";
-  let scenario = generateScenario(input, signal);
-  if (signal !== "wait" && !scenario) { signal = "wait"; decisionReasons.push("方向感はありますが、価格関係またはRR 1.5以上の条件を満たす候補がないため待機します。"); }
-  if (signal === "wait") scenario = null;
+  const directionSignal = signalFromScore(technical.score);
+  const scenario = generateScenario(input, directionSignal);
+  const signalEngineV2 = evaluateSignalEngineV2({
+    technical,
+    dataQuality: input.dataAvailability,
+    staleDataSources: input.staleDataSources,
+    eventRisk: {
+      ...calendarRisk,
+      imminent: calendarRisk.imminent || input.eventRisk.imminent,
+      uncertainTime: calendarRisk.uncertainTime || input.eventRisk.uncertainTime,
+      nextRiskAt: calendarRisk.nextRiskAt ?? input.eventRisk.nextRiskAt,
+      reasons: [...new Set([...calendarRisk.reasons, ...input.eventRisk.reasons])],
+    },
+    aiAvailable: aiReady,
+    confidence: aiReady ? confidence : null,
+    preferWait: !!interpretation?.preferWait,
+    contradictions: contradictory,
+    scenarioAvailable: scenario !== null,
+    now,
+  });
+  const signal = signalEngineV2.action === "WAIT" ? "wait" : signalEngineV2.direction;
+  const decisionReasons = signalEngineV2.actionReasons.map(reason => reason.message);
   const technicalBullish = technical.factors.filter(factor => factor.direction === "bullish").map(factor => factor.reason);
   const technicalBearish = technical.factors.filter(factor => factor.direction === "bearish").map(factor => factor.reason);
   const defaultExpiry = now + (aiReady ? 300_000 : 60_000);
@@ -100,7 +105,7 @@ export function finalizeAnalysis(
   const expiresAt = Math.min(defaultExpiry, riskAt > now ? riskAt : defaultExpiry, boundary > now ? boundary : defaultExpiry);
   const displayModel = aiReady ? (meta.actualModel ?? meta.requestedModel ?? (model || null)) : null;
   return {
-    pair: input.pair, signal, directionSignal: signalFromScore(score), action: signal === "wait" ? "WAIT" : signal.includes("buy") ? "BUY" : "SELL", economicRisk: { active: calendarRisk.imminent, known: input.eventRisk.known ?? false, reasons: calendarRisk.reasons, nextHigh: nextHigh(input.eventRisk.events ?? [], now) }, score, technicalScore: technical.score, confidence,
+    pair: input.pair, signal, directionSignal: signalEngineV2.direction, action: signalEngineV2.action, signalEngineV2, economicRisk: { active: calendarRisk.imminent, known: input.eventRisk.known ?? false, reasons: calendarRisk.reasons, nextHigh: nextHigh(input.eventRisk.events ?? [], now) }, score, technicalScore: technical.score, confidence,
     summary: aiReady ? interpretation.summary : `AI統合は未取得です。取得済みテクニカルの方向は${{ bullish: "上昇寄り", bearish: "下落寄り", neutral: "中立", unknown: "未確認" }[scoreDirection(technical.score)]}ですが、総合判定は「待った」です。`,
     factors, bullishReasons: aiReady ? interpretation.bullishReasons : technicalBullish, bearishReasons: aiReady ? interpretation.bearishReasons : technicalBearish,
     riskWarnings: [...new Set([...technical.warnings, ...input.dataAvailability.missingData, ...input.eventRisk.reasons, ...(interpretation?.riskWarnings ?? []), ...(interpretation?.scenarioComment ? [interpretation.scenarioComment] : []), "確信度とスコアは勝率ではありません。条件が整うまでは待機できます。" ])],
