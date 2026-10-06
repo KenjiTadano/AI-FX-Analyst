@@ -35,7 +35,7 @@ Canonical UTC 1m OHLC async streamからUTC 15m/1h/4h/1dayのTask116-compatible 
 
 ## 8. Partial Bucket Policy
 
-requested rangeが対象bucketの途中から/途中までの場合、そのtarget candleを出力しない。各timeframeの`partialRangeBucketCount`へ記録する。これはrange端だけのpartial判定であり、market closureによる通常の未観測minuteとは区別する。
+requested rangeが対象bucketの途中から/途中までの場合、そのtarget candleを出力しない。各timeframeの`partialRangeBucketCount`と`partialRangeBucketClassification: PARTIAL_RANGE_BUCKET`へ記録する。これはrange端だけのpartial判定であり、market closureによる通常の未観測minuteとは区別する。
 
 ## 9. Missing Minute Policy
 
@@ -63,7 +63,7 @@ Task116 importerに合わせ、UTF-8/BOMなし/LF、header `time,open,high,low,c
 
 ## 15. Quality Receipt
 
-`preparation-receipt.json`をmanifestと分離して生成。preparation version、sourceName/artifact IDs/raw checksums、priceType、original timeframe/timezone、requested half-open range、UTC target boundaries、input/accepted/rejected/out-of-range/duplicate/unordered/invalid counts、各timeframeのoutput count/first-last timestamp/empty/partial/observed/expected/missing/unclassified counts、generatedAt、normalization rulesを保持。
+`preparation-receipt.json`をmanifestと分離して生成。preparation version、sourceName/artifact IDs/raw checksums、priceType、original timeframe/timezone、requested half-open range、UTC target boundaries、input/accepted/rejected/out-of-range/duplicate/unordered/invalid counts、各timeframeのoutput count/first-last timestamp/empty/partial countと`PARTIAL_RANGE_BUCKET` classification/observed/expected/missing/unclassified counts、generatedAt、normalization rulesを保持。
 
 ## 16. Provenance
 
@@ -79,7 +79,7 @@ minute timestampからUTC bucket startを決定し、そのbucketの`[start,end)
 
 ## 19. Memory / Performance
 
-5年相当generator benchmark: 2,629,440 input rows、約24,989 ms、RSS snapshot差分76,828,672 bytes、`process.resourceUsage().maxRSS` native-unit差分119,592。OS native unitはここで換算しない。OOMなし。raw candle配列を保持せず、出力行数は15m 175,296、1h 43,824、4h 10,956、1day 1,826。測定はこのmachine/runtime/testでの参考値でhard thresholdではない。Node process全体の厳密なisolated peak計測ではない。
+5年相当generator benchmark: 2,629,440 input rows、約28,580 ms、RSS snapshot差分83,623,936 bytes、`process.resourceUsage().maxRSS` native-unit差分129,280。OS native unitはここで換算しない。OOMなし。raw candle配列を保持せず、出力行数は15m 175,296、1h 43,824、4h 10,956、1day 1,826。測定はこのmachine/runtime/testでの参考値でhard thresholdではない。Node process全体の厳密なisolated peak計測ではない。
 
 ## 20. Task116 Compatibility
 
@@ -102,9 +102,9 @@ minute timestampからUTC bucket startを決定し、そのbucketの`[start,end)
 - `npm test`: **1,283/1,283 PASS**。
 - `npm run lint`: **PASS**, warningsなし。
 - `npm run build`: **PASS**。
-- `npm run test:e2e -- --workers=1 --reporter=dot`: **362/362 PASS**, 4.5 minutes。
-- 5-year benchmark: **2,629,440 rows**, 24,989 ms; output rows 175,296 / 43,824 / 10,956 / 1,826; RSS snapshot delta 76,828,672 bytes; maxRSS native-unit delta 119,592; OOMなし。
-- `git diff --check`: 最終実行後に結果を記録。
+- `npm run test:e2e -- --workers=1 --reporter=dot`: **362/362 PASS**, 4.4 minutes。
+- 5-year benchmark: **2,629,440 rows**, 28,580 ms; output rows 175,296 / 43,824 / 10,956 / 1,826; RSS snapshot delta 83,623,936 bytes; maxRSS native-unit delta 129,280; OOMなし。
+- `git diff --check`: PASS。
 
 ## 25. Changed Files
 

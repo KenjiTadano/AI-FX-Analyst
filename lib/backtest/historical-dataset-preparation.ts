@@ -3,7 +3,7 @@ import { access, mkdir, mkdtemp, open, rename, rm, writeFile } from "node:fs/pro
 import { basename, dirname, join, resolve } from "node:path";
 import type { DatasetKind, HistoricalDatasetManifest } from "./local-dataset";
 import type { HistoricalTimeframe } from "./signal-replay";
-import type { Symbol, Candle } from "../market/types";
+import { symbols, type Symbol, type Candle } from "../market/types";
 
 export const HISTORICAL_PREPARATION_VERSION = "TASK116_1M_STREAM_V1" as const;
 export const DEFAULT_HISTORICAL_REQUESTED_START = "2021-01-01T00:00:00.000Z";
@@ -49,6 +49,7 @@ export interface TargetTimeframeQuality {
   missingCalendarMinuteCount: number;
   unclassifiedMissingMinuteCount: number;
   missingMinuteClassification: "UNCLASSIFIED_MISSING_MINUTES";
+  partialRangeBucketClassification: "PARTIAL_RANGE_BUCKET";
 }
 
 export interface HistoricalPreparationReceipt {
@@ -159,11 +160,13 @@ function emptyQuality(): TargetTimeframeQuality {
     missingCalendarMinuteCount: 0,
     unclassifiedMissingMinuteCount: 0,
     missingMinuteClassification: "UNCLASSIFIED_MISSING_MINUTES",
+    partialRangeBucketClassification: "PARTIAL_RANGE_BUCKET",
   };
 }
 
 function validateConfig(config: HistoricalPreparationConfig): { startAt: number; endAt: number; generatedAt: string } {
   if (!config.datasetId.trim()) throw new Error("datasetId is required");
+  if (!symbols.includes(config.pair)) throw new Error("pair is unsupported");
   if (!config.licenseProvenance.trim()) throw new Error("licenseProvenance is required");
   if (!config.sourceName.trim()) throw new Error("sourceName is required");
   if (!config.sourceArtifactIds.length || config.sourceArtifactIds.some((id) => !id.trim()) || new Set(config.sourceArtifactIds).size !== config.sourceArtifactIds.length) {

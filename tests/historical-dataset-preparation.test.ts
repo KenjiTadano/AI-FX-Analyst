@@ -250,6 +250,7 @@ test("partial first and last range buckets are omitted and counted", async () =>
     assert.ok(!fifteen.includes("2025-01-03T00:00:00.000Z"));
     assert.ok(fifteen.includes("2025-01-01T00:15:00.000Z"));
     assert.equal(fixture.result.receipt.quality["15m"].partialRangeBucketCount, 2);
+    assert.equal(fixture.result.receipt.quality["15m"].partialRangeBucketClassification, "PARTIAL_RANGE_BUCKET");
     assert.equal(fixture.result.receipt.quality["1day"].partialRangeBucketCount, 2);
     assert.deepEqual(
       csvRows(fixture.outputDirectory, "1day").map((row) => row[0]),
@@ -315,6 +316,7 @@ test("output bytes and target checksums are deterministic; MID is recorded, not 
 test("config requires explicit source timezone, price type and valid provenance", async () => {
   const record = [minuteAt("2025-01-01T00:00:00.000Z")];
   await assert.rejects(() => runPreparation(record, { config: { priceType: "" as never } }), /priceType/);
+  await assert.rejects(() => runPreparation(record, { config: { pair: "USDJPY" as never } }), /pair/);
   await assert.rejects(() => runPreparation(record, { config: { originalTimezone: "" } }), /originalTimezone/);
   await assert.rejects(() => runPreparation(record, { config: { rawChecksums: {} } }), /raw checksum/);
   await assert.rejects(() => runPreparation(record, { config: { requestedStart: "2025-01-01T00:00:01.000Z" } }), /minute boundaries/);
