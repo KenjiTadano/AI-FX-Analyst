@@ -16,6 +16,7 @@
 /test-results/
 /blob-report/
 /playwright/.cache/
+/tmp/dukascopy/
 
 # next.js
 /.next/
