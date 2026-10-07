@@ -9,7 +9,8 @@
     "lint": "eslint",
     "test": "node scripts/test.mjs",
     "test:e2e": "playwright test",
-    "test:e2e:headed": "playwright test --headed"
+    "test:e2e:headed": "playwright test --headed",
+    "historical:inventory": "node scripts/dukascopy-s3-inventory.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1147.0",
