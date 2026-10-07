@@ -388,11 +388,10 @@ test("dry-run emits the exact pilot key with no network discovery or download", 
 
 test("daily keys are unique, ordered and independent of locale formatting", async () => {
   const plan = await planDukascopyS3Acquisition(s3Request({ startDate: "2024-02-28", endDate: "2024-03-02" }));
-  assert.deepEqual(plan.logicalChunks.map((chunk) => chunk.objectKey), [
-    "USDJPY/2024/01/28_ticks.bi5",
-    "USDJPY/2024/01/29_ticks.bi5",
-    "USDJPY/2024/02/01_ticks.bi5",
-  ]);
+  assert.deepEqual(
+    plan.logicalChunks.map((chunk) => chunk.objectKey),
+    ["USDJPY/2024/01/28_ticks.bi5", "USDJPY/2024/01/29_ticks.bi5", "USDJPY/2024/02/01_ticks.bi5"],
+  );
   assert.equal(new Set(plan.dryRun.plannedObjectKeys).size, 3);
 });
 
@@ -447,13 +446,17 @@ test("missing daily object is checkpointed as NO_DATA and creates no artifact or
     assert.equal(chunk.canonicalMinuteCount, null);
     assert.deepEqual(readdirSync(join(directory, "raw")), []);
     assert.equal(transport.downloads, 1);
-    await assert.rejects(() => markDukascopyS3ChunkDecoded(checkpointPath, object.objectId, {
-      firstTickTimestamp: `${DAY}T00:00:00.000Z`,
-      lastTickTimestamp: `${DAY}T00:00:00.000Z`,
-      tickCount: 1,
-      canonicalMinuteCount: 1,
-      decoderVersion: "test",
-    }), /only VERIFIED chunks/);
+    await assert.rejects(
+      () =>
+        markDukascopyS3ChunkDecoded(checkpointPath, object.objectId, {
+          firstTickTimestamp: `${DAY}T00:00:00.000Z`,
+          lastTickTimestamp: `${DAY}T00:00:00.000Z`,
+          tickCount: 1,
+          canonicalMinuteCount: 1,
+          decoderVersion: "test",
+        }),
+      /only VERIFIED chunks/,
+    );
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }

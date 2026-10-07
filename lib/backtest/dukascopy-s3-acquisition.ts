@@ -11,10 +11,13 @@ export const DEFAULT_DUKASCOPY_BI5_RAW_DIRECTORY = "tmp/dukascopy/bi5-raw";
 
 export type S3AcquisitionMode = "DRY_RUN" | "TRANSFER";
 export type S3ChunkStatus = "PLANNED" | "DOWNLOADING" | "DOWNLOADED" | "VERIFIED" | "DECODED" | "NO_DATA" | "FAILED";
-export type DukascopyS3FailureCategory = "OBJECT_NOT_FOUND" | "DOWNLOAD_FAILED" | "ACCESS_DENIED" | "REQUESTER_PAYS_ERROR" | "CHECKSUM_ERROR" | "DECODE_ERROR";
+export type DukascopyS3FailureCategory = "OBJECT_NOT_FOUND" | "DOWNLOAD_FAILED" | "ACCESS_DENIED" | "REQUESTER_PAYS_ERROR" | "CHECKSUM_ERROR" | "DECODE_ERROR" | "APPROVAL_VIOLATION" | "AMBIGUOUS_ACCESS" | "SESSION_EXPIRED" | "UNEXPECTED_RESPONSE" | "SOURCE_CHANGED" | "TRANSIENT" | "CANCELLED" | "CAP_EXCEEDED" | "DISK_FULL" | "FILESYSTEM_UNSAFE";
 
 export class DukascopyS3AcquisitionError extends Error {
-  constructor(readonly category: DukascopyS3FailureCategory, message: string) {
+  constructor(
+    readonly category: DukascopyS3FailureCategory,
+    message: string,
+  ) {
     super(message);
     this.name = "DukascopyS3AcquisitionError";
   }
@@ -106,6 +109,7 @@ export interface S3AcquisitionChunkCheckpoint {
   decoderVersion: string | null;
   errorCategory: string | null;
   errorMessage: string | null;
+  absentInventoryRevision?: string;
 }
 
 export interface DukascopyS3AcquisitionCheckpoint {
@@ -129,6 +133,12 @@ export interface S3TransferSafetyOptions {
   allowMultiDayTransfer?: boolean;
   rawDirectory?: string;
   checkpointPath: string;
+  inventoryRevision?: string;
+  artifactWriter?: {
+    writePartial(path: string, source: AsyncIterable<Uint8Array>): Promise<void>;
+    publish(partialPath: string, verifiedPath: string): Promise<void>;
+  };
+  persistCheckpoint?: typeof writeDukascopyS3CheckpointAtomic;
 }
 
 const DAY_MS = 86_400_000;
@@ -167,13 +177,15 @@ export async function planDukascopyS3Acquisition(request: DukascopyS3Acquisition
   const chunks = logicalDays(startAt, endAt);
   const allowMultiDayTransfer = request.allowMultiDayTransfer === true;
   if (mode === "TRANSFER" && chunks.length > 1 && !allowMultiDayTransfer) throw new Error("multi-day transfer requires allowMultiDayTransfer: true");
-  const objects = chunks.map((chunk): DukascopyS3ObjectDescriptor => ({
-    objectId: chunk.objectKey,
-    key: chunk.objectKey,
-    instrument: request.instrument,
-    utcDay: chunk.utcDay,
-    byteSize: null,
-  }));
+  const objects = chunks.map(
+    (chunk): DukascopyS3ObjectDescriptor => ({
+      objectId: chunk.objectKey,
+      key: chunk.objectKey,
+      instrument: request.instrument,
+      utcDay: chunk.utcDay,
+      byteSize: null,
+    }),
+  );
   const objectIds = objects.map((object) => object.objectId);
   const objectKeys = objects.map((object) => object.key);
   const objectCapExceeded = request.maxObjects !== undefined && objects.length > request.maxObjects;
@@ -308,7 +320,7 @@ export async function markDukascopyS3ChunkDecodeFailed(checkpointPath: string, o
   return checkpoint;
 }
 
-function safeArtifactPrefix(objectId: string): string {
+export function safeArtifactPrefix(objectId: string): string {
   return createHash("sha256").update(objectId, "utf8").digest("hex").slice(0, 24);
 }
 
@@ -325,6 +337,7 @@ function assertTransferSafety(plan: DukascopyS3AcquisitionPlan, options: S3Trans
 export async function downloadDukascopyS3PlanSequentially(plan: DukascopyS3AcquisitionPlan, transport: DukascopyS3Transport, options: S3TransferSafetyOptions): Promise<DukascopyS3AcquisitionCheckpoint> {
   assertTransferSafety(plan, options);
   const checkpointPath = options.checkpointPath;
+  const persistCheckpoint = options.persistCheckpoint ?? writeDukascopyS3CheckpointAtomic;
   const previous = await readDukascopyS3Checkpoint(checkpointPath);
   const checkpoint = previous ?? checkpointFromPlan(plan);
   if (checkpoint.instrument !== plan.instrument || checkpoint.requestedStart !== plan.requestedStart || checkpoint.requestedEnd !== plan.requestedEnd) {
@@ -365,6 +378,7 @@ export async function downloadDukascopyS3PlanSequentially(plan: DukascopyS3Acqui
       };
       checkpoint.chunks.push(chunk);
     }
+    if (chunk.status === "NO_DATA" && options.inventoryRevision && chunk.absentInventoryRevision === options.inventoryRevision) continue;
     if ((await isVerifiedS3ArtifactReusable(chunk)) && (!object.expectedRawSha256 || chunk.rawSha256 === object.expectedRawSha256.toLowerCase())) {
       totalArtifactBytes += chunk.rawByteSize ?? 0;
       if (totalArtifactBytes > options.maxKnownBytes) throw new Error("verified artifacts exceed maxKnownBytes safety cap");
@@ -379,25 +393,31 @@ export async function downloadDukascopyS3PlanSequentially(plan: DukascopyS3Acqui
     chunk.downloadTimestamp = null;
     chunk.errorCategory = null;
     chunk.errorMessage = null;
-    await writeDukascopyS3CheckpointAtomic(checkpointPath, checkpoint);
+    await persistCheckpoint(checkpointPath, checkpoint);
 
     try {
-      const output = createWriteStream(partialPath, { flags: "wx" });
       let currentArtifactBytes = 0;
-      try {
+      const source = (async function* () {
         for await (const bytes of transport.downloadObject({ bucket: DUKASCOPY_BI5_BUCKET, region: DUKASCOPY_BI5_REGION, key: object.key, requesterPays: true })) {
           currentArtifactBytes += bytes.byteLength;
           if (totalArtifactBytes + currentArtifactBytes > options.maxKnownBytes) {
             throw new DukascopyS3AcquisitionError("DOWNLOAD_FAILED", "download exceeded maxKnownBytes safety cap");
           }
-          if (!output.write(bytes)) await once(output, "drain");
+          yield bytes;
         }
-        output.end();
-        await once(output, "finish");
-      } catch (error) {
-        output.destroy();
-        if (!output.closed) await once(output, "close");
-        throw error;
+      })();
+      if (options.artifactWriter) await options.artifactWriter.writePartial(partialPath, source);
+      else {
+        const output = createWriteStream(partialPath, { flags: "wx" });
+        try {
+          for await (const bytes of source) if (!output.write(bytes)) await once(output, "drain");
+          output.end();
+          await once(output, "finish");
+        } catch (error) {
+          output.destroy();
+          if (!output.closed) await once(output, "close");
+          throw error;
+        }
       }
 
       const rawSha256 = await hashFile(partialPath);
@@ -406,15 +426,16 @@ export async function downloadDukascopyS3PlanSequentially(plan: DukascopyS3Acqui
       chunk.downloadTimestamp = new Date().toISOString();
       chunk.rawSha256 = rawSha256;
       chunk.rawByteSize = rawByteSize;
-      await writeDukascopyS3CheckpointAtomic(checkpointPath, checkpoint);
+      await persistCheckpoint(checkpointPath, checkpoint);
       if (object.byteSize !== null && rawByteSize !== object.byteSize) throw new DukascopyS3AcquisitionError("CHECKSUM_ERROR", "downloaded byte size differs from inventory");
       if (object.expectedRawSha256 && rawSha256 !== object.expectedRawSha256.toLowerCase()) throw new DukascopyS3AcquisitionError("CHECKSUM_ERROR", "downloaded raw SHA-256 differs from inventory");
       const verifiedPath = join(rawDirectory, `${prefix}-${rawSha256}-attempt-${chunk.attempts}.bi5`);
-      await rename(partialPath, verifiedPath);
+      if (options.artifactWriter) await options.artifactWriter.publish(partialPath, verifiedPath);
+      else await rename(partialPath, verifiedPath);
       chunk.status = "VERIFIED";
       chunk.rawFilePath = verifiedPath;
       totalArtifactBytes += rawByteSize;
-      await writeDukascopyS3CheckpointAtomic(checkpointPath, checkpoint);
+      await persistCheckpoint(checkpointPath, checkpoint);
     } catch (error) {
       const category = error instanceof DukascopyS3AcquisitionError ? error.category : "DOWNLOAD_FAILED";
       if (category === "OBJECT_NOT_FOUND") {
@@ -431,7 +452,7 @@ export async function downloadDukascopyS3PlanSequentially(plan: DukascopyS3Acqui
         chunk.errorCategory = category;
         chunk.errorMessage = `${category}; underlying details are omitted to prevent secret leakage.`;
       }
-      await writeDukascopyS3CheckpointAtomic(checkpointPath, checkpoint);
+      await persistCheckpoint(checkpointPath, checkpoint);
       if (chunk.status === "NO_DATA") continue;
       return checkpoint;
     }
