@@ -1,4 +1,19 @@
-import { createInventorySnapshot, assertInventorySnapshot, assertApproval, assertExactDukascopyKey, acquisitionHash, acquisitionBackoff, AcquisitionSafetyError, DukascopyGetTransport, DukascopyS3Session, collectDukascopyInventory, type AcquisitionApproval, type FrozenDukascopyPlan, type InventorySnapshot } from "./dukascopy-s3-production";
+import {
+  createInventorySnapshot,
+  mergeInventoryProgress,
+  assertInventorySnapshot,
+  assertApproval,
+  assertExactDukascopyKey,
+  acquisitionHash,
+  acquisitionBackoff,
+  AcquisitionSafetyError,
+  DukascopyGetTransport,
+  DukascopyS3Session,
+  collectDukascopyInventory,
+  type AcquisitionApproval,
+  type FrozenDukascopyPlan,
+  type InventorySnapshot,
+} from "./dukascopy-s3-production";
 import { DurableAcquisitionStore } from "./dukascopy-s3-durable";
 import { planDukascopyS3Acquisition, downloadDukascopyS3PlanSequentially, DUKASCOPY_S3_ACQUISITION_VERSION, type DukascopyS3AcquisitionCheckpoint, type S3AcquisitionChunkCheckpoint } from "./dukascopy-s3-acquisition";
 import { createDukascopyBi5MidStream, DUKASCOPY_BI5_ADAPTER_VERSION } from "./dukascopy-bi5-adapter";
@@ -14,15 +29,74 @@ interface RunnerOptions {
   backoff?: typeof acquisitionBackoff;
 }
 
+export async function runTask116ClassifiedErrorRetry(options: {
+  plan: FrozenDukascopyPlan;
+  store: DurableAcquisitionStore;
+  session: DukascopyS3Session;
+  approvalId: string;
+  approvalHash: string;
+  authorizationId: string;
+  authorizationHash: string;
+  inventoryRevision: string;
+  capRevisionId: string;
+  capRevisionHash: string;
+  phase: "REPLACEMENT" | "CONTINUATION";
+  signal?: AbortSignal;
+}) {
+  if (!/^[a-zA-Z0-9_-]{1,80}$/.test(options.approvalId)) throw new AcquisitionSafetyError("APPROVAL_VIOLATION");
+  const approval = await options.store.readDocument<AcquisitionApproval>(`retry-approvals/${options.approvalId}.json`);
+  const metadata = approval?.classifiedErrorRetry;
+  if (
+    !approval ||
+    !metadata ||
+    acquisitionHash(approval) !== options.approvalHash ||
+    metadata.authorizationId !== options.authorizationId ||
+    metadata.authorizationHash !== options.authorizationHash ||
+    metadata.capRevisionId !== options.capRevisionId ||
+    metadata.capRevisionHash !== options.capRevisionHash ||
+    metadata.phase !== options.phase ||
+    approval.inventoryRevision !== options.inventoryRevision
+  )
+    throw new AcquisitionSafetyError("APPROVAL_VIOLATION");
+  const seed = await options.store.loadInventorySnapshot(options.plan, options.inventoryRevision);
+  if (options.phase === "CONTINUATION") return runDukascopyInventory({ plan: options.plan, approval, previous: seed, session: options.session, store: options.store, signal: options.signal });
+  let event = (await options.store.headAttemptJournal()).find((event) => event.approvalId === approval.id && event.kind === "CLASSIFIED_ERROR_RETRY");
+  let entries: InventorySnapshot["entries"];
+  if (event && event.state !== "RESERVED") {
+    await options.store.validateTask116RetryExecutionApproval(options.plan, approval, seed, true);
+    await options.store.reconcileHeadAttempts(options.plan, approval, seed);
+    const entry = event.classification ?? { key: event.key, utcDay: assertExactDukascopyKey(options.plan, event.key), status: "ERROR" as const, metadata: null, checkedAt: event.mayHaveBeenSentAt!, attempts: event.sequence, error: "INDETERMINATE" as const };
+    if (!event.classification) await options.store.saveInventoryEntry(options.plan, approval, entry);
+    entries = mergeInventoryProgress(options.plan, seed, [entry]).entries;
+  } else {
+    const gate = await options.store.gate(options.plan, approval, seed);
+    const collected = await collectDukascopyInventory({ plan: options.plan, approval, previous: seed, session: options.session, gate, resumedEntries: await options.store.loadInventoryProgress(options.plan, approval), signal: options.signal, persistEntry: (entry) => options.store.saveInventoryEntry(options.plan, approval, entry) });
+    entries = collected.entries;
+    event = (await options.store.headAttemptJournal()).find((candidate) => candidate.approvalId === approval.id && candidate.kind === "CLASSIFIED_ERROR_RETRY");
+  }
+  if (!event) throw new AcquisitionSafetyError("FILESYSTEM_UNSAFE");
+  const snapshot = createInventorySnapshot(options.plan, entries, event.classifiedAt ?? event.mayHaveBeenSentAt ?? event.reservedAt);
+  await options.store.saveSnapshot(options.plan, snapshot);
+  await options.store.completeCampaignChild(options.plan, approval, snapshot);
+  return snapshot;
+}
+
 export async function runDukascopyInventory(options: RunnerOptions & { previous?: InventorySnapshot }): Promise<InventorySnapshot> {
+  if (options.approval.classifiedErrorRetry?.phase === "REPLACEMENT") throw new AcquisitionSafetyError("APPROVAL_VIOLATION");
   const session = options.session ?? new DukascopyS3Session();
+  if (options.previous) assertInventorySnapshot(options.plan, options.previous);
   assertApproval(options.plan, options.approval, "INVENTORY", options.previous?.revision ?? null);
   if (session.mode === "DRY_RUN") return options.previous ?? createInventorySnapshot(options.plan, []);
   if (!options.store) throw new AcquisitionSafetyError("FILESYSTEM_UNSAFE");
-  const gate = await options.store.gate(options.plan, options.approval);
+  if (options.approval.inventoryRevision !== null) {
+    const stored = await options.store.loadInventorySnapshot(options.plan, options.approval.inventoryRevision);
+    if (!options.previous || acquisitionHash(stored) !== acquisitionHash(options.previous)) throw new AcquisitionSafetyError("APPROVAL_VIOLATION");
+  }
+  const gate = await options.store.gate(options.plan, options.approval, options.previous);
   const resumedEntries = await options.store.loadInventoryProgress(options.plan, options.approval);
   const snapshot = await collectDukascopyInventory({ ...options, session, gate, resumedEntries, persistEntry: (entry) => options.store!.saveInventoryEntry(options.plan, options.approval, entry) });
   await options.store.saveSnapshot(options.plan, snapshot);
+  await options.store.completeCampaignChild(options.plan, options.approval, snapshot);
   return snapshot;
 }
 
@@ -178,7 +252,7 @@ export async function runDukascopyDownload(options: RunnerOptions & { snapshot: 
     async publish(partial: string, verified: string) {
       if (!this.current) throw new AcquisitionSafetyError("FILESYSTEM_UNSAFE");
       await this.current.publish(partial, verified);
-      const chunk = checkpoint.chunks.find(chunk => chunk.rawFilePath === partial);
+      const chunk = checkpoint.chunks.find((chunk) => chunk.rawFilePath === partial);
       if (!chunk) throw new AcquisitionSafetyError("FILESYSTEM_UNSAFE");
       const raw = await store.hashRaw(verified);
       await store.recordVerified(plan, approval, verified, chunk.objectKey, raw.bytes, raw.sha256);

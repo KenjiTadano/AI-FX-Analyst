@@ -9,7 +9,15 @@ export const DUKASCOPY_PROFILE = "dukascopy-pilot";
 export const DUKASCOPY_REQUEST_TIMEOUT_MS = 60_000;
 export const DUKASCOPY_MAX_ATTEMPTS = 3;
 export type AcquisitionOperation = "HEAD" | "GET";
-export type AcquisitionErrorCode = "APPROVAL_VIOLATION" | "AMBIGUOUS_ACCESS" | "REQUESTER_PAYS_ERROR" | "SESSION_EXPIRED" | "UNEXPECTED_RESPONSE" | "SOURCE_CHANGED" | "TRANSIENT" | "CANCELLED" | "CAP_EXCEEDED" | "DISK_FULL" | "FILESYSTEM_UNSAFE" | "DECODE_ERROR";
+export type InventoryCrashBoundary = "A_BEFORE_RESERVATION" | "A_AFTER_ATTEMPT_DIRECTORY" | "B_AFTER_RESERVED_EVENT" | "B_AFTER_RESERVED" | "C_AFTER_MAY_HAVE_BEEN_SENT" | "D_AFTER_RESPONSE" | "E_AFTER_CLASSIFIED" | "F_AFTER_PROGRESS" | "G_AFTER_SNAPSHOT" | "CAP_AFTER_AUTHORIZATION_EVIDENCE" | "CAP_AFTER_LEDGER_COMMIT" | "RETRY_AFTER_TRANSITION_EVIDENCE";
+export type AcquisitionErrorCode = "APPROVAL_VIOLATION" | "AMBIGUOUS_ACCESS" | "REQUESTER_PAYS_ERROR" | "SESSION_EXPIRED" | "UNEXPECTED_RESPONSE" | "SOURCE_CHANGED" | "TRANSIENT" | "CANCELLED" | "CAP_EXCEEDED" | "DISK_FULL" | "FILESYSTEM_UNSAFE" | "DECODE_ERROR" | "INDETERMINATE";
+
+export class SimulatedInventoryCrash extends Error {
+  constructor(readonly boundary: InventoryCrashBoundary) {
+    super(`Simulated inventory crash at ${boundary}`);
+    this.name = "SimulatedInventoryCrash";
+  }
+}
 
 export class AcquisitionSafetyError extends DukascopyS3AcquisitionError {
   constructor(readonly code: AcquisitionErrorCode) {
@@ -83,7 +91,9 @@ export function createDukascopySdkClient(activation?: symbol): OfflineS3Sender &
       assertExactDukascopyKey(await plan, command.input.Key ?? "");
       return command instanceof HeadObjectCommand ? sdk.send(command, options) : sdk.send(command, options);
     },
-    destroy() { sdk.destroy(); },
+    destroy() {
+      sdk.destroy();
+    },
   };
   SDK_SENDERS.add(sender);
   return sender;
@@ -100,7 +110,7 @@ export class DukascopyS3Session {
   private readonly frozenPlan = createFrozenDukascopyPlan();
   private closeClient: (() => void) | undefined;
   constructor(options: { mode?: "DRY_RUN" | "OFFLINE_TEST" | "LIVE"; allowLiveRequests?: boolean; fakeClient?: OfflineS3Sender } = {}) {
-    if (Object.keys(options).some(key => !["mode", "allowLiveRequests", "fakeClient"].includes(key))) throw new AcquisitionSafetyError("APPROVAL_VIOLATION");
+    if (Object.keys(options).some((key) => !["mode", "allowLiveRequests", "fakeClient"].includes(key))) throw new AcquisitionSafetyError("APPROVAL_VIOLATION");
     this.mode = options.mode ?? "DRY_RUN";
     if (this.mode === "LIVE") {
       if (options.allowLiveRequests !== true || options.fakeClient) throw new AcquisitionSafetyError("APPROVAL_VIOLATION");
@@ -128,7 +138,9 @@ export class DukascopyS3Session {
     return this.client.send(command, { abortSignal: signal });
   }
 
-  destroy(): void { this.closeClient?.(); }
+  destroy(): void {
+    this.closeClient?.();
+  }
 }
 
 export interface AcquisitionCaps {
@@ -151,8 +163,54 @@ export interface AcquisitionApproval {
   keys: readonly string[];
   caps: AcquisitionCaps;
   globalCaps: AcquisitionCaps;
+  campaignId?: string;
+  recoveryAllowance?: { maxIndeterminateHeadRetries: number };
+  campaignPreparation?: CampaignChildPreparationBinding;
+  classifiedErrorRetry?: { authorizationId: string; authorizationHash: string; phase: "REPLACEMENT" | "CONTINUATION"; capRevisionId: string; capRevisionHash: string };
   minimumFreeBytes: number;
   expiresAt: string;
+}
+
+export interface OperatorApprovalEvidence {
+  authorizedAt: string;
+  operatorApprovalReference: string;
+  operatorApprovalHash: string;
+  reason: string;
+}
+
+export interface CampaignChildPreparationBinding extends OperatorApprovalEvidence {
+  version: 1;
+  childSequence: number;
+  priorLedgerHash: string;
+  priorLedgerGeneration: number;
+  capAuthorizationId: string;
+  capAuthorizationHash: string;
+  childDescriptorHash: string;
+  instrument: FrozenDukascopyPlan["instrument"];
+  bucket: FrozenDukascopyPlan["bucket"];
+  region: FrozenDukascopyPlan["region"];
+  requesterPays: true;
+}
+
+export function assertOperatorApprovalEvidence(evidence: OperatorApprovalEvidence, expiresAt: string, now = Date.now()): void {
+  const authorized = Date.parse(evidence.authorizedAt);
+  const expires = Date.parse(expiresAt);
+  if (
+    !Number.isFinite(authorized) ||
+    !Number.isFinite(expires) ||
+    new Date(authorized).toISOString() !== evidence.authorizedAt ||
+    new Date(expires).toISOString() !== expiresAt ||
+    authorized >= expires ||
+    expires - authorized > 86_400_000 ||
+    (now !== 0 && (authorized > now || authorized < now - 86_400_000 || expires <= now)) ||
+    !/^[A-Z0-9][A-Z0-9_-]{2,127}$/.test(evidence.operatorApprovalReference) ||
+    /^(?:PLACEHOLDER|TODO|TEST|NONE|UNKNOWN|DUMMY)(?:$|[_-])/i.test(evidence.operatorApprovalReference) ||
+    !/^[a-f0-9]{64}$/.test(evidence.operatorApprovalHash) ||
+    /^([a-f0-9])\1{63}$/.test(evidence.operatorApprovalHash) ||
+    !/^[A-Za-z0-9][A-Za-z0-9 .,()\[\]:;_/-]{9,499}$/.test(evidence.reason) ||
+    /secret|password|credential|token|bearer|private.?key|AKIA|ASIA|placeholder|\bTODO\b|\bdummy\b/i.test(`${evidence.reason} ${evidence.operatorApprovalReference}`)
+  )
+    throw new AcquisitionSafetyError("APPROVAL_VIOLATION");
 }
 
 export function assertApproval(plan: FrozenDukascopyPlan, approval: AcquisitionApproval, operation: AcquisitionApproval["operation"], revision: string | null, now = Date.now()): void {
@@ -183,6 +241,48 @@ export function assertApproval(plan: FrozenDukascopyPlan, approval: AcquisitionA
   )
     throw new AcquisitionSafetyError("APPROVAL_VIOLATION");
   if (["__proto__", "constructor", "prototype"].includes(approval.id)) throw new AcquisitionSafetyError("APPROVAL_VIOLATION");
+  if (approval.campaignId !== undefined && !/^[a-zA-Z0-9_-]{1,80}$/.test(approval.campaignId)) throw new AcquisitionSafetyError("APPROVAL_VIOLATION");
+  if (approval.classifiedErrorRetry) {
+    const binding = approval.classifiedErrorRetry;
+    if (
+      Object.keys(binding).length !== 5 ||
+      approval.operation !== "INVENTORY" ||
+      !approval.campaignId ||
+      !approval.campaignPreparation ||
+      !["REPLACEMENT", "CONTINUATION"].includes(binding.phase) ||
+      !/^[a-zA-Z0-9_-]{1,80}$/.test(binding.authorizationId) ||
+      binding.capRevisionId !== binding.authorizationId ||
+      !/^[a-f0-9]{64}$/.test(binding.authorizationHash) ||
+      !/^[a-f0-9]{64}$/.test(binding.capRevisionHash)
+    )
+      throw new AcquisitionSafetyError("APPROVAL_VIOLATION");
+  }
+  if (approval.campaignPreparation) {
+    const binding = approval.campaignPreparation;
+    assertOperatorApprovalEvidence(binding, approval.expiresAt, now);
+    const fields = ["version", "childSequence", "priorLedgerHash", "priorLedgerGeneration", "capAuthorizationId", "capAuthorizationHash", "childDescriptorHash", "authorizedAt", "operatorApprovalReference", "operatorApprovalHash", "reason", "instrument", "bucket", "region", "requesterPays"];
+    if (
+      Object.keys(binding).length !== fields.length ||
+      Object.keys(binding).some((field) => !fields.includes(field)) ||
+      !approval.campaignId ||
+      approval.operation !== "INVENTORY" ||
+      binding.version !== 1 ||
+      !Number.isSafeInteger(binding.childSequence) ||
+      binding.childSequence < 1 ||
+      binding.childSequence > 5 ||
+      !Number.isSafeInteger(binding.priorLedgerGeneration) ||
+      binding.priorLedgerGeneration < 1 ||
+      !/^[a-zA-Z0-9_-]{1,80}$/.test(binding.capAuthorizationId) ||
+      [binding.priorLedgerHash, binding.capAuthorizationHash, binding.childDescriptorHash].some((hash) => !/^[a-f0-9]{64}$/.test(hash)) ||
+      binding.instrument !== plan.instrument ||
+      binding.bucket !== plan.bucket ||
+      binding.region !== plan.region ||
+      binding.requesterPays !== true
+    )
+      throw new AcquisitionSafetyError("APPROVAL_VIOLATION");
+  }
+  if (approval.recoveryAllowance !== undefined && (Object.keys(approval.recoveryAllowance).length !== 1 || !Number.isSafeInteger(approval.recoveryAllowance.maxIndeterminateHeadRetries) || approval.recoveryAllowance.maxIndeterminateHeadRetries < 0 || approval.recoveryAllowance.maxIndeterminateHeadRetries > approval.caps.maxHeadAttempts))
+    throw new AcquisitionSafetyError("APPROVAL_VIOLATION");
   for (const caps of [approval.caps, approval.globalCaps]) {
     const fields: Array<keyof AcquisitionCaps> = ["maxHeadAttempts", "maxGetAttempts", "maxNetworkBytes", "maxVerifiedBytes", "maxObjects", "maxRetries"];
     if (Object.keys(caps).length !== fields.length || fields.some((field) => !Number.isSafeInteger(caps[field]) || caps[field] < 0) || caps.maxObjects < approval.keys.length || caps.maxObjects > 1826 || caps.maxRetries > 2) throw new AcquisitionSafetyError("APPROVAL_VIOLATION");
@@ -252,7 +352,7 @@ export function createInventorySnapshot(plan: FrozenDukascopyPlan, supplied: rea
     if (entry.key !== key || entry.utcDay !== assertExactDukascopyKey(plan, key) || !["UNKNOWN", "PRESENT", "CONFIRMED_ABSENT", "AMBIGUOUS_ACCESS", "ERROR"].includes(entry.status) || !Number.isSafeInteger(entry.attempts) || entry.attempts < 0 || entry.attempts > 3 || (entry.status === "PRESENT") !== (entry.metadata !== null))
       throw new AcquisitionSafetyError("APPROVAL_VIOLATION");
     if (entry.status === "UNKNOWN" ? entry.checkedAt !== null || entry.attempts !== 0 || entry.error !== null : !entry.checkedAt || !Number.isFinite(Date.parse(entry.checkedAt)) || new Date(entry.checkedAt).toISOString() !== entry.checkedAt) throw new AcquisitionSafetyError("APPROVAL_VIOLATION");
-    if (entry.error && !["APPROVAL_VIOLATION", "AMBIGUOUS_ACCESS", "REQUESTER_PAYS_ERROR", "SESSION_EXPIRED", "UNEXPECTED_RESPONSE", "SOURCE_CHANGED", "TRANSIENT", "CANCELLED", "CAP_EXCEEDED", "DISK_FULL", "FILESYSTEM_UNSAFE", "DECODE_ERROR"].includes(entry.error)) throw new AcquisitionSafetyError("APPROVAL_VIOLATION");
+    if (entry.error && !["APPROVAL_VIOLATION", "AMBIGUOUS_ACCESS", "REQUESTER_PAYS_ERROR", "SESSION_EXPIRED", "UNEXPECTED_RESPONSE", "SOURCE_CHANGED", "TRANSIENT", "CANCELLED", "CAP_EXCEEDED", "DISK_FULL", "FILESYSTEM_UNSAFE", "DECODE_ERROR", "INDETERMINATE"].includes(entry.error)) throw new AcquisitionSafetyError("APPROVAL_VIOLATION");
     if (entry.metadata) {
       const metadata = entry.metadata;
       const reconstructed = allowlistedMetadata({
@@ -271,7 +371,19 @@ export function createInventorySnapshot(plan: FrozenDukascopyPlan, supplied: rea
   });
   if (supplied.length > plan.keys.length || !Number.isFinite(Date.parse(createdAt))) throw new AcquisitionSafetyError("APPROVAL_VIOLATION");
   const complete = entries.every((entry) => entry.status === "PRESENT" || entry.status === "CONFIRMED_ABSENT");
-  const content = { planHash: plan.planHash, instrument: plan.instrument, requestedStart: plan.requestedStart, requestedEnd: plan.requestedEnd, bucket: plan.bucket, region: plan.region, requesterPays: plan.requesterPays, keys: Object.freeze([...plan.keys]), entries: Object.freeze(entries), createdAt, actualTotalBytes: complete ? entries.reduce((total, entry) => total + (entry.metadata?.contentLength ?? 0), 0) : null };
+  const content = {
+    planHash: plan.planHash,
+    instrument: plan.instrument,
+    requestedStart: plan.requestedStart,
+    requestedEnd: plan.requestedEnd,
+    bucket: plan.bucket,
+    region: plan.region,
+    requesterPays: plan.requesterPays,
+    keys: Object.freeze([...plan.keys]),
+    entries: Object.freeze(entries),
+    createdAt,
+    actualTotalBytes: complete ? entries.reduce((total, entry) => total + (entry.metadata?.contentLength ?? 0), 0) : null,
+  };
   return Object.freeze({ ...content, revision: acquisitionHash(content) });
 }
 
@@ -281,11 +393,42 @@ export function assertInventorySnapshot(plan: FrozenDukascopyPlan, snapshot: Inv
   if (rebuilt.revision !== snapshot.revision || rebuilt.actualTotalBytes !== snapshot.actualTotalBytes || acquisitionHash(snapshot) !== acquisitionHash(rebuilt)) throw new AcquisitionSafetyError("APPROVAL_VIOLATION");
 }
 
+export function mergeInventoryProgress(plan: FrozenDukascopyPlan, seed: InventorySnapshot, progress: readonly InventoryEntry[]): InventorySnapshot {
+  assertInventorySnapshot(plan, seed);
+  const entries = [...seed.entries];
+  const seen = new Set<string>();
+  for (const entry of progress) {
+    assertExactDukascopyKey(plan, entry.key);
+    if (seen.has(entry.key)) throw new AcquisitionSafetyError("APPROVAL_VIOLATION");
+    seen.add(entry.key);
+    const index = plan.keys.indexOf(entry.key);
+    const previous = entries[index];
+    const checked = [...seed.entries];
+    checked[index] = entry;
+    createInventorySnapshot(plan, checked, seed.createdAt);
+    if (previous.status === "PRESENT" || previous.status === "CONFIRMED_ABSENT") {
+      if (entry.status !== previous.status || acquisitionHash(entry.metadata) !== acquisitionHash(previous.metadata)) throw new AcquisitionSafetyError("APPROVAL_VIOLATION");
+      continue;
+    }
+    entries[index] = entry;
+  }
+  return createInventorySnapshot(plan, entries, seed.createdAt);
+}
+
 export interface AcquisitionRequestGate {
-  before(operation: AcquisitionOperation, key: string, reservedBytes: number): Promise<void>;
+  before(operation: AcquisitionOperation, key: string, reservedBytes: number): Promise<HeadAttemptReservation | null>;
+  markHeadMayHaveBeenSent(attemptId: string): Promise<void>;
+  classifyHead(attemptId: string, entry: InventoryEntry): Promise<void>;
+  fault(boundary: InventoryCrashBoundary): void;
   received(key: string, bytes: number): Promise<void>;
   success(operation: AcquisitionOperation, key: string): Promise<void>;
   failure(operation: AcquisitionOperation, key: string, error: AcquisitionErrorCode): Promise<void>;
+}
+
+export interface HeadAttemptReservation {
+  attemptId: string;
+  sequence: number;
+  kind: "INITIAL" | "RETRY" | "INDETERMINATE_RECOVERY" | "CLASSIFIED_ERROR_RETRY";
 }
 
 export function classifyAcquisitionError(error: unknown, operation: AcquisitionOperation): AcquisitionSafetyError {
@@ -366,41 +509,46 @@ export async function collectDukascopyInventory(options: {
   assertApproval(plan, approval, "INVENTORY", options.previous?.revision ?? null);
   const initial = options.previous ?? createInventorySnapshot(plan, []);
   if (session.mode === "DRY_RUN") return initial;
-  const entries = initial.entries.map((entry) => ({ ...entry }));
-  for (const entry of options.resumedEntries ?? []) {
-    if (!approval.keys.includes(entry.key)) throw new AcquisitionSafetyError("APPROVAL_VIOLATION");
-    entries[plan.keys.indexOf(entry.key)] = entry;
-  }
-  createInventorySnapshot(plan, entries);
+  for (const entry of options.resumedEntries ?? []) if (!approval.keys.includes(entry.key)) throw new AcquisitionSafetyError("APPROVAL_VIOLATION");
+  const entries = mergeInventoryProgress(plan, initial, options.resumedEntries ?? []).entries.map((entry) => ({ ...entry }));
   for (const key of approval.keys) {
     const index = plan.keys.indexOf(key);
     if (["PRESENT", "CONFIRMED_ABSENT"].includes(entries[index].status)) continue;
     let attempts = entries[index].attempts;
     while (true) {
       let started = false;
+      let reservation: HeadAttemptReservation | null = null;
       try {
         if (options.signal?.aborted) throw new AcquisitionSafetyError("CANCELLED");
-        await gate.before("HEAD", key, 0);
+        reservation = await gate.before("HEAD", key, 0);
         started = true;
         attempts++;
+        if (reservation) await gate.markHeadMayHaveBeenSent(reservation.attemptId);
         const output = await withDeadline((signal) => session.send(new HeadObjectCommand({ Bucket: plan.bucket, Key: key, RequestPayer: "requester" }), signal, approval), options.timeoutMs ?? DUKASCOPY_REQUEST_TIMEOUT_MS, options.signal);
+        gate.fault("D_AFTER_RESPONSE");
         entries[index] = { key, utcDay: assertExactDukascopyKey(plan, key), status: "PRESENT", metadata: allowlistedMetadata(output), checkedAt: new Date().toISOString(), attempts, error: null };
+        if (reservation) await gate.classifyHead(reservation.attemptId, entries[index]);
         await gate.success("HEAD", key);
       } catch (error) {
+        if (error instanceof SimulatedInventoryCrash) throw error;
         const value = error as { name?: string; $metadata?: { httpStatusCode?: number }; $response?: { headers?: Record<string, string> } };
         const region = value?.$response?.headers?.["x-amz-bucket-region"];
         const absent = value?.$metadata?.httpStatusCode === 404 && ["NoSuchKey", "NotFound"].includes(value.name ?? "") && (!region || region === plan.region) && value?.$response?.headers?.["x-amz-delete-marker"] !== "true";
         const safe = classifyAcquisitionError(error, "HEAD");
+        const classifiedEntry: InventoryEntry = { key, utcDay: assertExactDukascopyKey(plan, key), status: absent ? "CONFIRMED_ABSENT" : safe.code === "AMBIGUOUS_ACCESS" ? "AMBIGUOUS_ACCESS" : "ERROR", metadata: null, checkedAt: new Date().toISOString(), attempts, error: absent ? null : safe.code };
+        if (reservation) await gate.classifyHead(reservation.attemptId, classifiedEntry);
         if (started) await gate.failure("HEAD", key, safe.code);
-        if (safe.code === "TRANSIENT" && attempts < Math.min(3, approval.caps.maxRetries + 1, approval.globalCaps.maxRetries + 1)) {
+        if (safe.code === "TRANSIENT" && reservation?.kind !== "INDETERMINATE_RECOVERY" && reservation?.kind !== "CLASSIFIED_ERROR_RETRY" && attempts < Math.min(3, approval.caps.maxRetries + 1, approval.globalCaps.maxRetries + 1)) {
           await (options.backoff ?? acquisitionBackoff)(attempts, options.signal);
           continue;
         }
-        entries[index] = { key, utcDay: assertExactDukascopyKey(plan, key), status: absent ? "CONFIRMED_ABSENT" : safe.code === "AMBIGUOUS_ACCESS" ? "AMBIGUOUS_ACCESS" : "ERROR", metadata: null, checkedAt: new Date().toISOString(), attempts, error: absent ? null : safe.code };
+        entries[index] = classifiedEntry;
         await options.persistEntry?.(entries[index]);
+        gate.fault("F_AFTER_PROGRESS");
         if (!absent) return createInventorySnapshot(plan, entries);
       }
       await options.persistEntry?.(entries[index]);
+      gate.fault("F_AFTER_PROGRESS");
       break;
     }
   }
